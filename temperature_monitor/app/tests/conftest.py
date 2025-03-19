@@ -1,12 +1,13 @@
-import pytest
 import os
 import tempfile
 from datetime import datetime, timedelta
 
-from app import create_app, db
-from app.models import User, UserRole, TemperatureReading, AppSettings
-from app import bcrypt
+import pytest
 from flask_jwt_extended import create_access_token
+
+from app import create_app, db, bcrypt
+from app.models import User, UserRole, TemperatureReading, AppSettings
+
 
 @pytest.fixture(scope='function')
 def app():
