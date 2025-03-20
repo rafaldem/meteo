@@ -1,6 +1,4 @@
 import json
-from flask_jwt_extended import decode_token
-import json
 
 from flask_jwt_extended import decode_token
 

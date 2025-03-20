@@ -50,9 +50,9 @@ def test_concurrent_requests(client, admin_headers):
     import threading
 
     # Define a function to make requests
-    def make_request(results, index):
+    def make_request(thread_results, index):
         response = client.get("/api/sensors", headers=admin_headers)
-        results[index] = response.status_code
+        thread_results[index] = response.status_code
 
     # Make 10 concurrent requests
     results = [0] * 10

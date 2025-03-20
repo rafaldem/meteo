@@ -46,7 +46,7 @@ def get_temperature(sensor_id):
         except ValueError:
             return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
     else:
-        base_date = datetime.utcnow()
+        base_date = datetime.now()
 
     # Determine time range based on timeframe
     if timeframe == "daily":
@@ -92,6 +92,7 @@ def get_temperature(sensor_id):
             TemperatureReading.timestamp < end_date,
         )
         .group_by("time_group")
+        .format(format_str)
         .all()
     )
 

@@ -9,16 +9,24 @@ from app.utils.decorators import admin_required
 
 
 @pytest.fixture
-def mock_app():
+def jwt_authenticated_app():
+    """
+    Creates a Flask application with JWT authentication configured.
+
+    This fixture is necessary for testing functions that use JWT authentication,
+    such as the admin_required decorator which verifies JWT identity claims.
+    The JWT manager must be initialized for these tests to work properly.
+    """
     app = Flask(__name__)
     app.config["JWT_SECRET_KEY"] = "test-key"
-    jwt = JWTManager(app)  # TODO: what for was that added?
+    # Initialize JWTManager without storing the reference
+    JWTManager(app)
     return app
 
 
-def test_admin_required_decorator(mock_app):
+def test_admin_required_decorator(jwt_authenticated_app):
     """Test the admin_required decorator."""
-    with mock_app.app_context():
+    with jwt_authenticated_app.app_context():
         # Mock the get_jwt_identity function
         with patch("app.utils.decorators.get_jwt_identity", return_value=1):
             # Mock the User.query

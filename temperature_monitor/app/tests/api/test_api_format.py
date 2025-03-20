@@ -22,6 +22,7 @@ def test_api_response_format(client, admin_headers):
         assert response.content_type == "application/json"
 
         # Ensure we can parse the JSON response
+        data = {}
         try:
             data = json.loads(response.data)
             assert isinstance(data, dict)

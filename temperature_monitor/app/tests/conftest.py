@@ -58,7 +58,7 @@ def _init_test_data():
    db.session.add(regular_user)
 
    # Create sample temperature readings
-   base_date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+   base_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
    for i in range(24):  # 24 hours of data
       reading_time = base_date + timedelta(hours=i)
       reading = TemperatureReading(
