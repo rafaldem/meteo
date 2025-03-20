@@ -11,7 +11,13 @@ jwt = JWTManager()
 bcrypt = Bcrypt()
 
 
-def create_app(config_class=Config):
+def init_database(app):
+    """Initialize the database tables."""
+    with app.app_context():
+        db.create_all()
+
+
+def create_app(config_class=Config, init_db=True):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
@@ -27,8 +33,8 @@ def create_app(config_class=Config):
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(admin_bp, url_prefix="/admin")
 
-    @app.before_first_request
-    def create_tables():
-        db.create_all()
+    # Initialize database if requested
+    if init_db:
+        init_database(app)
 
     return app
