@@ -13,7 +13,9 @@ def admin_required(f):
         user = User.query.get(current_user_id)
 
         if not user or user.role != UserRole.ADMIN:
-            return jsonify({"error": "Admin privileges required"}), 403
+            response = jsonify({"error": "Admin privileges required"})
+            response.status_code = 403
+            return response, 403
 
         return f(*args, **kwargs)
 

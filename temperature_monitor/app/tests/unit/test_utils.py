@@ -1,7 +1,8 @@
+from typing import Tuple
 from unittest.mock import patch, MagicMock
 
 import pytest
-from flask import Flask
+from flask import Flask, Response
 from flask_jwt_extended import JWTManager
 
 from app.models import UserRole
@@ -39,7 +40,7 @@ def test_admin_required_decorator(jwt_authenticated_app):
                 mock_user.role = UserRole.ADMIN
 
                 @admin_required
-                def admin_function():
+                def admin_function() -> Tuple[Response, int] | str:
                     return "Admin access granted"
 
                 result = admin_function()
@@ -47,5 +48,7 @@ def test_admin_required_decorator(jwt_authenticated_app):
 
                 # Test with regular user
                 mock_user.role = UserRole.USER
-                with pytest.raises(Exception):
-                    admin_function()
+
+                response, code = admin_function()
+                assert response.json == {"error": "Admin privileges required"}
+                assert response.status_code == 403

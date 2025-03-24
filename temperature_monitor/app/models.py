@@ -67,3 +67,11 @@ class AppSettings(db.Model):
             "description": self.description,
             "requires_admin": self.requires_admin,
         }
+
+
+class Sensor(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), index=True, nullable=False)
+    sensor_id = db.Column(db.String(64), index=True, nullable=False)
+    location = db.Column(db.String(64), index=True, nullable=False)
+    description = db.Column(db.String(255))
