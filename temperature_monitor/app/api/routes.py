@@ -37,8 +37,14 @@ def add_temperature():
 @bp.route("/temperature/<sensor_id>", methods=["GET"])
 @jwt_required()
 def get_temperature(sensor_id):
+    timeframe_params = ["hourly", "daily", "weekly", "monthly"]
     timeframe = request.args.get("timeframe", "daily")
     date_str = request.args.get("date")
+    if timeframe not in timeframe_params:
+        return (
+            jsonify({"error": f"Invalid timeframe parameter." f' Shuould be one of: {", ".join(timeframe_params)}.'}),
+            422,
+        )
 
     if date_str:
         try:
