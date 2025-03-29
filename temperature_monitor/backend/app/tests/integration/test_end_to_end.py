@@ -83,8 +83,8 @@ def test_refactored_code_quality(app):
     # In a real project, we would use linters and static analyzers
 
     # Check import patterns and organization
-    from app import db
-    from app.models import User, TemperatureReading
+    from backend.app import db
+    from models import User, TemperatureReading
 
     # Check that models use correct relationships
     with app.app_context():

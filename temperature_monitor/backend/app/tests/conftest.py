@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import pytest
 from flask_jwt_extended import create_access_token
 
-from app import create_app, db, bcrypt
-from app.models import User, UserRole, TemperatureReading, AppSettings, Sensor
+from backend.app import create_app, db, bcrypt
+from models import User, UserRole, TemperatureReading, AppSettings, Sensor
 
 
 class TestConfig:

@@ -1,4 +1,4 @@
-from app.models import AppSettings
+from models import AppSettings
 
 
 def test_app_settings_creation(db_session):

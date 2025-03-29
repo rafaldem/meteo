@@ -1,6 +1,6 @@
 import json
 
-from app.models import User, UserRole
+from models import User, UserRole
 
 
 def test_register(client, db_session):
