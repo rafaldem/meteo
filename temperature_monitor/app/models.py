@@ -70,8 +70,8 @@ class AppSettings(db.Model):
 
 
 class Sensor(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String(64), primary_key=True)
     name = db.Column(db.String(64), index=True, nullable=False)
     sensor_id = db.Column(db.String(64), index=True, nullable=False)
     location = db.Column(db.String(64), index=True, nullable=False)
-    description = db.Column(db.String(255))
+    description = db.Column(db.String(255), nullable=False)

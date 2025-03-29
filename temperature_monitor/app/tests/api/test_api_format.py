@@ -19,6 +19,9 @@ def test_individual_endpoints(client, admin_headers, endpoint, method):
 
         print(f"Testing {endpoint}: Status={response.status_code}, Data={response.data[:100]}")
 
+        if response.status_code != 200:
+            print(f"ERROR: Endpoint {endpoint} failed with status {response.status_code} and response {response.data}")
+
         assert response.status_code == 200
         assert response.content_type == "application/json"
 

@@ -1,90 +1,95 @@
-import os
-import tempfile
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 from flask_jwt_extended import create_access_token
 
-from app import create_app, db, bcrypt
-from app.models import User, UserRole, TemperatureReading, AppSettings, Sensor
+from temperature_monitor.app import create_app, db
+from temperature_monitor.app.models import AppSettings, Sensor, TemperatureReading, User
 
 
 class TestConfig:
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    DATA_DIR = Path(__file__).parent.parent / "data"
+    DATA_DIR.mkdir(exist_ok=True)
+    SQLALCHEMY_DATABASE_URI = None  # Will be set in fixture
+
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = "test-secret-key"
     SECRET_KEY = "test-secret-key"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def sample_app_settings():
-    """Fixture to provide a sample AppSettings object."""
-    return AppSettings(
-        id=1,
-        key="sample_key",
-        value="sample_value",
-        description="Sample description",
-        requires_admin=True
-    )
+    """Sample app settings for testing"""
+    return {
+        "TITLE": "Test title",
+        "DESCRIPTION": "Test description",
+        "VERSION": "0.1.0",
+        "AUTHOR": {
+            "name": "Test Author",
+            "email": "test@example.com",
+        },
+    }
 
 
-@pytest.fixture(scope="function")
-def app():
-    """Create and configure a Flask app for testing."""
-    # Create a temporary file to isolate the database for each test
-    db_fd, db_path = tempfile.mkstemp()
+@pytest.fixture(scope="session")
+def app(sample_app_settings):
+    """Create a Flask app context for the tests."""
+    TestConfig.SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    app = create_app(TestConfig, sample_app_settings)
 
-    # Create a TestConfig instance and set the database URI
-    test_config = TestConfig()
-    test_config.SQLALCHEMY_DATABASE_URI = f"sqlite:///{db_path}"
-
-    app = create_app(test_config)
-
-    # Create the database and load test data
+    # Establish an application context before running the tests
     with app.app_context():
         db.create_all()
         _init_test_data()
-
-    yield app
-
-    # Close and remove the temporary database
-    try:
-        os.close(db_fd)
-        os.unlink(db_path)
-    except (IOError, PermissionError) as e:
-        print(f"Error closing and removing the temporary database: {e}")
+        yield app
+        db.session.remove()
+        db.drop_all()
 
 
 def _init_test_data():
-    """Initialize test data in the database."""
+    """Initialize test data."""
     # Create test users
-    admin_password = bcrypt.generate_password_hash("admin_password").decode("utf-8")
-    user_password = bcrypt.generate_password_hash("user_password").decode("utf-8")
+    admin_user = User(username="admin", email="admin@example.com", is_admin=True)
+    admin_user.set_password("admin-password")
 
-    admin_user = User(username="admin", email="admin@example.com", password_hash=admin_password, role=UserRole.ADMIN)
-
-    regular_user = User(username="user", email="user@example.com", password_hash=user_password, role=UserRole.USER)
+    regular_user = User(username="user", email="user@example.com", is_admin=False)
+    regular_user.set_password("user-password")
 
     db.session.add(admin_user)
     db.session.add(regular_user)
 
-    # Create test sensors - ensure test-sensor-1 exists
-    sensor1 = Sensor(id="test-sensor-1", name="Test Sensor 1", location="Test Location")
-    sensor2 = Sensor(id="test-sensor-2", name="Test Sensor 2", location="Another Location")
+    sensor1 = Sensor(
+        id="test-sensor-1",
+        name="Test Sensor 1",
+        sensor_id="s001",
+        location="Test Location",
+        description="Temperature sensor for test location 1",
+    )
 
+    sensor2 = Sensor(
+        id="test-sensor-2",
+        name="Test Sensor 2",
+        sensor_id="s002",
+        location="Another Location",
+        description="Temperature sensor for test location 2",
+    )
     db.session.add(sensor1)
     db.session.add(sensor2)
 
-    # Add temperature readings for the past week to support daily timeframe
+    # Create some temperature readings for the past 7 days
     now = datetime.now()
     for day in range(7):
+        # Add readings for multiple times in a day
         timestamp = now - timedelta(days=day)
-        # Add multiple readings per day
+
         for hour in [8, 12, 16, 20]:
             reading_time = timestamp.replace(hour=hour, minute=0, second=0)
             reading1 = TemperatureReading(
-                sensor_id="test-sensor-1", temperature=20 + day + (hour / 10), timestamp=reading_time  # Varying temperature
+                sensor_id="test-sensor-1",
+                temperature=20 + day + (hour / 10),
+                timestamp=reading_time,  # Varying temperature
             )
             reading2 = TemperatureReading(
                 sensor_id="test-sensor-2", temperature=18 + day + (hour / 10), timestamp=reading_time
@@ -93,69 +98,85 @@ def _init_test_data():
             db.session.add(reading2)
 
     # Create some app settings
-    db.session.add(
+    settings = [
+        AppSettings(key="SITE_TITLE", value="Temperature Monitor", description="Site title", requires_admin=True),
+        AppSettings(key="ALERT_THRESHOLD", value="30", description="Temperature alert threshold", requires_admin=True),
         AppSettings(
-            key="sampling_rate", value="300", description="Sensor sampling rate in seconds", requires_admin=True
-        )
-    )
-    db.session.add(
-        AppSettings(key="display_units", value="celsius", description="Temperature display units", requires_admin=False)
-    )
+            key="ALERT_RECIPIENTS", value="admin@example.com", description="Alert recipients", requires_admin=True
+        ),
+        AppSettings(key="DISPLAY_UNITS", value="C", description="Display units (C/F)", requires_admin=False),
+    ]
+
+    for setting in settings:
+        db.session.add(setting)
 
     db.session.commit()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def client(app):
     """A test client for the app."""
-    app.testing = True
     return app.test_client()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def db_session(app):
-    """A database session for the tests."""
-    with app.app_context():
-        connection = db.engine.connect()
-        transaction = connection.begin()
+    """Creates a new database session for each test."""
+    connection = db.engine.connect()
+    transaction = connection.begin()
 
-        session = db.session
+    # Use a nested transaction for test isolation
+    options = dict(bind=connection, binds={})
+    session = db.create_scoped_session(options=options)
 
-        yield session
+    # Patch the session on the db instance
+    db.session = session
 
-        session.close()
-        transaction.rollback()
-        connection.close()
+    yield session
 
-
-@pytest.fixture(scope="function")
-def admin_token(app):
-    """JWT token for admin user."""
-    with app.app_context():
-        admin = User.query.filter_by(username="admin").first()
-        expires = timedelta(hours=1)
-        access_token = create_access_token(
-            identity=admin.id, additional_claims={"is_admin": True}, expires_delta=expires
-        )
-        return access_token
+    # Cleanup
+    transaction.rollback()
+    connection.close()
+    session.remove()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
+def admin_token():
+    """Create a JWT token for admin authentication."""
+
+    # Make sure you're creating a token with the proper subject field
+    return create_access_token(
+        identity={"username": "admin", "user_id": 1},  # Make sure this contains a string subject
+        expires_delta=timedelta(hours=1),
+        additional_claims={"is_admin": True},
+    )
+
+
+@pytest.fixture(scope="session")
 def user_token(app):
     """JWT token for regular user."""
     with app.app_context():
         user = User.query.filter_by(username="user").first()
-        token = create_access_token(identity=user.id)
-        return token
+        expires = timedelta(hours=1)
+        access_token = create_access_token(
+            identity=user.id, additional_claims={"is_admin": False}, expires_delta=expires
+        )
+        return access_token
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def admin_headers(admin_token):
     """Headers with admin JWT token."""
-    return {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
+    return {
+        "Authorization": f"Bearer {admin_token}",
+        "Content-Type": "application/json",
+    }
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def user_headers(user_token):
     """Headers with user JWT token."""
-    return {"Authorization": f"Bearer {user_token}", "Content-Type": "application/json"}
+    return {
+        "Authorization": f"Bearer {user_token}",
+        "Content-Type": "application/json",
+    }
