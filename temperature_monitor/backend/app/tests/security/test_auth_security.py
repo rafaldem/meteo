@@ -16,7 +16,7 @@ def test_password_security(client):
 
     # Attempt to get the user's stored password from the database
     with client.application.app_context():
-        from app.models import User
+        from models import User
 
         user = User.query.filter_by(username="security_test").first()
 

@@ -1,6 +1,6 @@
 import json
 
-from app.models import TemperatureReading
+from models import TemperatureReading
 
 
 def test_add_temperature(client, admin_headers, db_session):

@@ -1,6 +1,6 @@
 import json
 
-from app.models import User, UserRole, AppSettings
+from models import User, UserRole, AppSettings
 
 
 def test_get_users_admin(client, admin_headers):

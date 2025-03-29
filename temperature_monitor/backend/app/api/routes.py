@@ -4,9 +4,9 @@ from flask import request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
 
-from app import db
-from app.api import bp
-from app.models import TemperatureReading, User, UserRole
+from backend.app import db
+from api import bp
+from models import TemperatureReading, User, UserRole
 
 
 @bp.route("/temperature", methods=["POST"])

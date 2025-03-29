@@ -1,10 +1,10 @@
 from flask import request, jsonify
 from flask_jwt_extended import jwt_required
 
-from app import db, bcrypt
-from app.admin import bp
-from app.models import User, UserRole, AppSettings
-from app.utils.decorators import admin_required
+from backend.app import db, bcrypt
+from admin import bp
+from models import User, UserRole, AppSettings
+from utils.decorators import admin_required
 
 
 @bp.route("/users", methods=["GET"])

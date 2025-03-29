@@ -5,8 +5,8 @@ import pytest
 from flask import Flask, Response
 from flask_jwt_extended import JWTManager
 
-from app.models import UserRole
-from app.utils.decorators import admin_required
+from models import UserRole
+from utils.decorators import admin_required
 
 
 @pytest.fixture

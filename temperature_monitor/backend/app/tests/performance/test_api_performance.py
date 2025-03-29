@@ -19,7 +19,7 @@ def test_temperature_query_performance(client, admin_headers, db_session):
     """Test temperature query performance with larger dataset."""
     # First, add more data to the database
     with client.application.app_context():
-        from app.models import TemperatureReading
+        from models import TemperatureReading
 
         # Add 1000 temperature readings
         base_date = datetime.now()

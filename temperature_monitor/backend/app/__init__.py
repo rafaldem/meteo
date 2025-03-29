@@ -25,9 +25,9 @@ def create_app(config_class=Config, init_db=True):
     jwt.init_app(app)
     bcrypt.init_app(app)
 
-    from app.auth import bp as auth_bp
-    from app.api import bp as api_bp
-    from app.admin import bp as admin_bp
+    from auth import bp as auth_bp
+    from api import bp as api_bp
+    from admin import bp as admin_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(api_bp, url_prefix="/api")

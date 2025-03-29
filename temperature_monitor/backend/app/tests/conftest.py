@@ -4,16 +4,13 @@ from pathlib import Path
 import pytest
 from flask_jwt_extended import create_access_token
 
-from temperature_monitor.app import create_app, db
-from temperature_monitor.app.models import AppSettings, Sensor, TemperatureReading, User
+from app import create_app, db, bcrypt
+from app.models import User, UserRole, TemperatureReading, AppSettings, Sensor
 
 
 class TestConfig:
     TESTING = True
-    DATA_DIR = Path(__file__).parent.parent / "data"
-    DATA_DIR.mkdir(exist_ok=True)
-    SQLALCHEMY_DATABASE_URI = None  # Will be set in fixture
-
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = "test-secret-key"
     SECRET_KEY = "test-secret-key"
