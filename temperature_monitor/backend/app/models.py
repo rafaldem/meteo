@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from backend.app import db
+from app import db
 
 
 class UserRole(Enum):
