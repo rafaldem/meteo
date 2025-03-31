@@ -8,11 +8,9 @@ from datetime import datetime, timedelta
 import logging
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 class TemperatureAPIClient:
     """Client for interacting with the temperature data API."""
@@ -85,10 +83,7 @@ class TemperatureAPIClient:
         start_date_str = start_date.strftime(self.date_format)
         end_date_str = end_date.strftime(self.date_format)
 
-        data = self._make_request(
-            "/temperature/weekly",
-            {"start_date": start_date_str, "end_date": end_date_str}
-        )
+        data = self._make_request("/temperature/weekly", {"start_date": start_date_str, "end_date": end_date_str})
 
         return self._convert_to_dataframe(data)
 
@@ -109,10 +104,7 @@ class TemperatureAPIClient:
         if month is None:
             month = datetime.now().month
 
-        data = self._make_request(
-            "/temperature/monthly",
-            {"year": year, "month": month}
-        )
+        data = self._make_request("/temperature/monthly", {"year": year, "month": month})
 
         return self._convert_to_dataframe(data)
 
@@ -147,10 +139,7 @@ class TemperatureAPIClient:
         start_date_str = start_date.strftime(self.date_format)
         end_date_str = end_date.strftime(self.date_format)
 
-        data = self._make_request(
-            "/temperature/range",
-            {"start_date": start_date_str, "end_date": end_date_str}
-        )
+        data = self._make_request("/temperature/range", {"start_date": start_date_str, "end_date": end_date_str})
 
         return self._convert_to_dataframe(data)
 
@@ -170,7 +159,7 @@ class TemperatureAPIClient:
         df = pd.DataFrame(data)
 
         # Convert timestamp strings to datetime objects if the column exists
-        if 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
+        if "timestamp" in df.columns:
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
 
         return df

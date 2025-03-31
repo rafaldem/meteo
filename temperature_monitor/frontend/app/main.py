@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import json
 from config import API_BASE_URL, API_ENDPOINTS, DATE_FORMATS
 
+
 class TemperatureDataApp:
     """
     A Streamlit application for visualizing temperature data collected from
@@ -22,10 +23,7 @@ class TemperatureDataApp:
     def setup_page(self):
         """Configure the initial Streamlit page settings."""
         st.set_page_config(
-            page_title="Temperature Data Dashboard",
-            page_icon="🌡️",
-            layout="wide",
-            initial_sidebar_state="expanded"
+            page_title="Temperature Data Dashboard", page_icon="🌡️", layout="wide", initial_sidebar_state="expanded"
         )
         st.title("Temperature Data Dashboard")
         st.sidebar.title("Settings")
@@ -47,20 +45,17 @@ class TemperatureDataApp:
 
             params = {}
             if start_date and end_date:
-                params['start_date'] = start_date
-                params['end_date'] = end_date
+                params["start_date"] = start_date
+                params["end_date"] = end_date
 
-            response = requests.get(
-                f"{self.api_base_url}{endpoint}",
-                params=params
-            )
+            response = requests.get(f"{self.api_base_url}{endpoint}", params=params)
 
             if response.status_code == 200:
                 data = response.json()
                 df = pd.DataFrame(data)
 
                 # Convert timestamp to datetime
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
 
                 return df
             else:
@@ -89,34 +84,36 @@ class TemperatureDataApp:
         # Create a line plot
         fig = px.line(
             df,
-            x='timestamp',
-            y='temperature',
+            x="timestamp",
+            y="temperature",
             title=f"{view_type.capitalize()} Temperature Data",
-            labels={'temperature': 'Temperature (°C)', 'timestamp': 'Time'},
-            line_shape='linear'
+            labels={"temperature": "Temperature (°C)", "timestamp": "Time"},
+            line_shape="linear",
         )
 
         # Add a range slider
         fig.update_layout(
             xaxis=dict(
                 rangeselector=dict(
-                    buttons=list([
-                        dict(count=1, label="1d", step="day", stepmode="backward"),
-                        dict(count=7, label="1w", step="day", stepmode="backward"),
-                        dict(count=1, label="1m", step="month", stepmode="backward"),
-                        dict(count=6, label="6m", step="month", stepmode="backward"),
-                        dict(step="all")
-                    ])
+                    buttons=list(
+                        [
+                            dict(count=1, label="1d", step="day", stepmode="backward"),
+                            dict(count=7, label="1w", step="day", stepmode="backward"),
+                            dict(count=1, label="1m", step="month", stepmode="backward"),
+                            dict(count=6, label="6m", step="month", stepmode="backward"),
+                            dict(step="all"),
+                        ]
+                    )
                 ),
                 rangeslider=dict(visible=True),
-                type="date"
+                type="date",
             )
         )
 
         # Add min/max/avg annotations
-        min_temp = df['temperature'].min()
-        max_temp = df['temperature'].max()
-        avg_temp = df['temperature'].mean()
+        min_temp = df["temperature"].min()
+        max_temp = df["temperature"].max()
+        avg_temp = df["temperature"].mean()
 
         fig.add_annotation(
             text=f"Min: {min_temp:.2f}°C<br>Max: {max_temp:.2f}°C<br>Avg: {avg_temp:.2f}°C",
@@ -125,7 +122,7 @@ class TemperatureDataApp:
             xref="paper",
             yref="paper",
             x=0.02,
-            y=0.98
+            y=0.98,
         )
 
         return fig
@@ -133,11 +130,7 @@ class TemperatureDataApp:
     def run(self):
         """Run the Streamlit application."""
         # View type selector
-        view_type = st.sidebar.selectbox(
-            "View Type",
-            options=["daily", "weekly", "monthly", "yearly"],
-            index=0
-        )
+        view_type = st.sidebar.selectbox("View Type", options=["daily", "weekly", "monthly", "yearly"], index=0)
 
         # Date range selection
         use_custom_range = st.sidebar.checkbox("Use Custom Date Range")
@@ -146,15 +139,9 @@ class TemperatureDataApp:
             # Custom date range inputs
             col1, col2 = st.sidebar.columns(2)
             with col1:
-                start_date = st.date_input(
-                    "Start Date",
-                    value=datetime.now() - timedelta(days=7)
-                )
+                start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))
             with col2:
-                end_date = st.date_input(
-                    "End Date",
-                    value=datetime.now()
-                )
+                end_date = st.date_input("End Date", value=datetime.now())
 
             start_date_str = start_date.strftime(self.date_formats["api"])
             end_date_str = end_date.strftime(self.date_formats["api"])
@@ -174,7 +161,7 @@ class TemperatureDataApp:
             if not df.empty:
                 # Format the timestamp for display
                 display_df = df.copy()
-                display_df['timestamp'] = display_df['timestamp'].dt.strftime(self.date_formats["display"])
+                display_df["timestamp"] = display_df["timestamp"].dt.strftime(self.date_formats["display"])
                 st.dataframe(display_df)
             else:
                 st.write("No data available.")
@@ -183,10 +170,11 @@ class TemperatureDataApp:
         if not df.empty:
             st.download_button(
                 label="Download Data as CSV",
-                data=df.to_csv(index=False).encode('utf-8'),
+                data=df.to_csv(index=False).encode("utf-8"),
                 file_name=f"temperature_data_{view_type}_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv"
+                mime="text/csv",
             )
+
 
 if __name__ == "__main__":
     app = TemperatureDataApp()

@@ -10,33 +10,28 @@ import json
 import os
 
 # Import custom modules
-from config import (
-    API_BASE_URL, API_ENDPOINTS, DATE_FORMATS,
-    TEMPERATURE_THRESHOLDS, DEFAULT_TIME_RANGES
-)
+from config import API_BASE_URL, API_ENDPOINTS, DATE_FORMATS, TEMPERATURE_THRESHOLDS, DEFAULT_TIME_RANGES
 from api_client import TemperatureAPIClient
 from data_processor import TemperatureDataProcessor
 from visualization import TemperatureVisualizer
 
 # Page configuration
 st.set_page_config(
-    page_title="Temperature Data Dashboard",
-    page_icon="🌡️",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Temperature Data Dashboard", page_icon="🌡️", layout="wide", initial_sidebar_state="expanded"
 )
 
 # Initialize session state
-if 'data' not in st.session_state:
+if "data" not in st.session_state:
     st.session_state.data = None
-if 'date_range' not in st.session_state:
+if "date_range" not in st.session_state:
     st.session_state.date_range = None
-if 'view_type' not in st.session_state:
+if "view_type" not in st.session_state:
     st.session_state.view_type = "daily"
-if 'show_anomalies' not in st.session_state:
+if "show_anomalies" not in st.session_state:
     st.session_state.show_anomalies = False
-if 'visualization_type' not in st.session_state:
+if "visualization_type" not in st.session_state:
     st.session_state.visualization_type = "time_series"
+
 
 class TemperatureDashboardApp:
     """Streamlit application for temperature data visualization."""
@@ -46,8 +41,7 @@ class TemperatureDashboardApp:
         self.title = "Raspberry Pi Temperature Monitor"
         self.api_client = TemperatureAPIClient(API_BASE_URL, DATE_FORMATS["api"])
         self.data_processor = TemperatureDataProcessor(
-            low_threshold=TEMPERATURE_THRESHOLDS["low_warning"],
-            high_threshold=TEMPERATURE_THRESHOLDS["high_warning"]
+            low_threshold=TEMPERATURE_THRESHOLDS["low_warning"], high_threshold=TEMPERATURE_THRESHOLDS["high_warning"]
         )
         self.visualizer = TemperatureVisualizer(theme="plotly", color_scale="Viridis")
 
@@ -62,7 +56,7 @@ class TemperatureDashboardApp:
         view_type = st.sidebar.selectbox(
             "View Type",
             options=["daily", "weekly", "monthly", "yearly", "custom"],
-            index=["daily", "weekly", "monthly", "yearly", "custom"].index(st.session_state.view_type)
+            index=["daily", "weekly", "monthly", "yearly", "custom"].index(st.session_state.view_type),
         )
 
         # Update session state if changed
@@ -73,36 +67,22 @@ class TemperatureDashboardApp:
         if view_type == "custom":
             col1, col2 = st.sidebar.columns(2)
             with col1:
-                start_date = st.date_input(
-                    "Start Date",
-                    value=datetime.now() - timedelta(days=7)
-                )
+                start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))
             with col2:
-                end_date = st.date_input(
-                    "End Date",
-                    value=datetime.now()
-                )
+                end_date = st.date_input("End Date", value=datetime.now())
 
             # Update session state
-            st.session_state.date_range = {
-                "start_date": start_date,
-                "end_date": end_date
-            }
+            st.session_state.date_range = {"start_date": start_date, "end_date": end_date}
 
         # Visualization type selector
         st.sidebar.header("Visualization")
         visualization_type = st.sidebar.selectbox(
             "Visualization Type",
-            options=[
-                "time_series",
-                "daily_heatmap",
-                "temperature_distribution",
-                "monthly_comparison",
-                "dashboard"
-            ],
+            options=["time_series", "daily_heatmap", "temperature_distribution", "monthly_comparison", "dashboard"],
             format_func=lambda x: x.replace("_", " ").title(),
-            index=["time_series", "daily_heatmap", "temperature_distribution",
-                   "monthly_comparison", "dashboard"].index(st.session_state.visualization_type)
+            index=["time_series", "daily_heatmap", "temperature_distribution", "monthly_comparison", "dashboard"].index(
+                st.session_state.visualization_type
+            ),
         )
 
         # Update session state if changed
@@ -111,10 +91,7 @@ class TemperatureDashboardApp:
 
         # Anomaly detection
         st.sidebar.header("Data Analysis")
-        show_anomalies = st.sidebar.checkbox(
-            "Detect Anomalies",
-            value=st.session_state.show_anomalies
-        )
+        show_anomalies = st.sidebar.checkbox("Detect Anomalies", value=st.session_state.show_anomalies)
 
         # Update session state if changed
         if show_anomalies != st.session_state.show_anomalies:
@@ -126,7 +103,7 @@ class TemperatureDashboardApp:
                 min_value=1,
                 max_value=24,
                 value=12,
-                help="Window size for anomaly detection (hours)"
+                help="Window size for anomaly detection (hours)",
             )
 
             anomaly_threshold = st.sidebar.slider(
@@ -135,7 +112,7 @@ class TemperatureDashboardApp:
                 max_value=5.0,
                 value=3.0,
                 step=0.1,
-                help="Z-score threshold for anomaly detection"
+                help="Z-score threshold for anomaly detection",
             )
         else:
             anomaly_window = 12
@@ -153,7 +130,7 @@ class TemperatureDashboardApp:
             "visualization_type": visualization_type,
             "show_anomalies": show_anomalies,
             "anomaly_window": anomaly_window,
-            "anomaly_threshold": anomaly_threshold
+            "anomaly_threshold": anomaly_threshold,
         }
 
     def fetch_data(self, settings):
@@ -221,9 +198,7 @@ class TemperatureDashboardApp:
         # Detect anomalies if requested
         if settings["show_anomalies"]:
             processed_df = self.data_processor.detect_anomalies(
-                processed_df,
-                window=settings["anomaly_window"],
-                threshold=settings["anomaly_threshold"]
+                processed_df, window=settings["anomaly_window"], threshold=settings["anomaly_threshold"]
             )
 
         return processed_df
@@ -246,49 +221,37 @@ class TemperatureDashboardApp:
 
         # Create appropriate visualization
         if visualization_type == "time_series":
-            if show_anomalies and 'is_anomaly' in df.columns:
+            if show_anomalies and "is_anomaly" in df.columns:
                 fig = self.visualizer.create_anomaly_chart(
-                    df,
-                    title=f"{view_type.capitalize()} Temperature Data with Anomalies"
+                    df, title=f"{view_type.capitalize()} Temperature Data with Anomalies"
                 )
             else:
-                fig = self.visualizer.create_time_series(
-                    df,
-                    title=f"{view_type.capitalize()} Temperature Data"
-                )
+                fig = self.visualizer.create_time_series(df, title=f"{view_type.capitalize()} Temperature Data")
 
         elif visualization_type == "daily_heatmap":
             fig = self.visualizer.create_daily_heatmap(
-                df,
-                title=f"Daily Temperature Patterns - {view_type.capitalize()} View"
+                df, title=f"Daily Temperature Patterns - {view_type.capitalize()} View"
             )
 
         elif visualization_type == "temperature_distribution":
             fig = self.visualizer.create_temperature_distribution(
-                df,
-                title=f"Temperature Distribution - {view_type.capitalize()} View"
+                df, title=f"Temperature Distribution - {view_type.capitalize()} View"
             )
 
         elif visualization_type == "monthly_comparison":
             # For monthly comparison, filter to the current year if we have yearly data
-            if view_type == "yearly" and 'timestamp' in df.columns and not df.empty:
-                year = df['timestamp'].dt.year.max()
+            if view_type == "yearly" and "timestamp" in df.columns and not df.empty:
+                year = df["timestamp"].dt.year.max()
                 fig = self.visualizer.create_monthly_comparison(
-                    df,
-                    year=year,
-                    title=f"Monthly Temperature Comparison - {year}"
+                    df, year=year, title=f"Monthly Temperature Comparison - {year}"
                 )
             else:
                 fig = self.visualizer.create_monthly_comparison(
-                    df,
-                    title=f"Monthly Temperature Comparison - {view_type.capitalize()} View"
+                    df, title=f"Monthly Temperature Comparison - {view_type.capitalize()} View"
                 )
 
         elif visualization_type == "dashboard":
-            fig = self.visualizer.create_dashboard(
-                df,
-                title=f"Temperature Dashboard - {view_type.capitalize()} View"
-            )
+            fig = self.visualizer.create_dashboard(df, title=f"Temperature Dashboard - {view_type.capitalize()} View")
 
         else:
             st.error(f"Unsupported visualization type: {visualization_type}")
@@ -327,18 +290,18 @@ class TemperatureDashboardApp:
 
             with col3:
                 st.metric("Standard Deviation", f"{stats.get('std', 'N/A'):.2f}°C")
-                if 'change_rate_per_hour' in stats:
+                if "change_rate_per_hour" in stats:
                     st.metric(
                         "Change Rate",
                         f"{stats['change_rate_per_hour']:.3f}°C/hour",
-                        delta=f"{stats['change_rate_per_hour']:.2f}"
+                        delta=f"{stats['change_rate_per_hour']:.2f}",
                     )
 
             with col4:
                 st.metric("Data Points", f"{stats.get('count', 'N/A')}")
 
-                if 'low_alert_count' in stats and 'high_alert_count' in stats:
-                    alerts = stats['low_alert_count'] + stats['high_alert_count']
+                if "low_alert_count" in stats and "high_alert_count" in stats:
+                    alerts = stats["low_alert_count"] + stats["high_alert_count"]
                     st.metric("Alert Count", f"{alerts}")
 
     def display_raw_data(self, df):
@@ -353,9 +316,9 @@ class TemperatureDashboardApp:
 
         with st.expander("View Raw Data", expanded=False):
             # Format timestamp for display if present
-            if 'timestamp' in df.columns:
+            if "timestamp" in df.columns:
                 display_df = df.copy()
-                display_df['timestamp'] = display_df['timestamp'].dt.strftime(DATE_FORMATS["display"])
+                display_df["timestamp"] = display_df["timestamp"].dt.strftime(DATE_FORMATS["display"])
                 st.dataframe(display_df)
             else:
                 st.dataframe(df)
@@ -363,9 +326,9 @@ class TemperatureDashboardApp:
             # Download button
             st.download_button(
                 label="Download Data as CSV",
-                data=df.to_csv(index=False).encode('utf-8'),
+                data=df.to_csv(index=False).encode("utf-8"),
                 file_name=f"temperature_data_{st.session_state.view_type}_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv"
+                mime="text/csv",
             )
 
     def generate_sample_data(self, view_type):
@@ -403,11 +366,11 @@ class TemperatureDashboardApp:
         base_temp = 22.0  # Base temperature in Celsius
 
         # Daily pattern: warmer during day, cooler at night
-        daily_pattern = np.sin(np.linspace(0, 2*np.pi, 24)) * 3
+        daily_pattern = np.sin(np.linspace(0, 2 * np.pi, 24)) * 3
 
         # Seasonal pattern: warmer in summer, cooler in winter
         days_since_jan1 = (date_range.dayofyear - 1) % 365
-        seasonal_pattern = np.sin(days_since_jan1 * (2*np.pi/365)) * 5
+        seasonal_pattern = np.sin(days_since_jan1 * (2 * np.pi / 365)) * 5
 
         # Generate temperatures with patterns and some random noise
         temperatures = []
@@ -423,10 +386,7 @@ class TemperatureDashboardApp:
             temperatures.append(round(temp, 2))
 
         # Create DataFrame
-        df = pd.DataFrame({
-            'timestamp': date_range,
-            'temperature': temperatures
-        })
+        df = pd.DataFrame({"timestamp": date_range, "temperature": temperatures})
 
         return df
 
@@ -444,8 +404,8 @@ class TemperatureDashboardApp:
         processed_df = self.process_data(df, settings)
 
         # Display top cards with current temperature and status
-        if not processed_df.empty and 'temperature' in processed_df.columns:
-            current_temp = processed_df['temperature'].iloc[-1]
+        if not processed_df.empty and "temperature" in processed_df.columns:
+            current_temp = processed_df["temperature"].iloc[-1]
 
             col1, col2, col3 = st.columns(3)
 
@@ -453,17 +413,20 @@ class TemperatureDashboardApp:
                 st.metric(
                     "Current Temperature",
                     f"{current_temp:.1f}°C",
-                    delta=f"{current_temp - processed_df['temperature'].iloc[-2]:.1f}°C"
-                    if len(processed_df) > 1 else None
+                    delta=(
+                        f"{current_temp - processed_df['temperature'].iloc[-2]:.1f}°C"
+                        if len(processed_df) > 1
+                        else None
+                    ),
                 )
 
             with col2:
-                avg_temp = processed_df['temperature'].mean()
+                avg_temp = processed_df["temperature"].mean()
                 st.metric("Average Temperature", f"{avg_temp:.1f}°C")
 
             with col3:
-                min_temp = processed_df['temperature'].min()
-                max_temp = processed_df['temperature'].max()
+                min_temp = processed_df["temperature"].min()
+                max_temp = processed_df["temperature"].max()
                 st.metric("Min / Max", f"{min_temp:.1f}°C / {max_temp:.1f}°C")
 
         # Create visualization
@@ -474,6 +437,7 @@ class TemperatureDashboardApp:
 
         # Display raw data table
         self.display_raw_data(processed_df)
+
 
 # Create and run the app
 if __name__ == "__main__":
