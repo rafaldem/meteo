@@ -3,9 +3,9 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "temperature-monitor"
+name = "temperature-monitor-backend"
 version = "0.1.0"
-description = "Temperature monitoring application"
+description = "Temperature monitoring application (backend)"
 authors = [
     {name = "rafaldem", email = "<162693211+rafaldem@users.noreply.github.com>"}
 ]
