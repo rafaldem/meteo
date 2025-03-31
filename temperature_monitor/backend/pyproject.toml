@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "temperature-monitor"
+version = "0.1.0"
+description = "Temperature monitoring application"
+authors = [
+    {name = "rafaldem", email = "<162693211+rafaldem@users.noreply.github.com>"}
+]
+requires-python = ">=3.7"
+dependencies = [
+    "flask",
+    "pytest",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "flake8",
+]
