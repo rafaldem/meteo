@@ -4,7 +4,8 @@ from flask import request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
 
-from backend.app import db
+from app import db
+from version import __version__
 from api import bp
 from models import TemperatureReading, User, UserRole
 
@@ -131,3 +132,8 @@ def get_sensors():
     sensor_ids = [s.sensor_id for s in sensors]
 
     return jsonify({"sensors": sensor_ids}), 200
+
+
+@bp.route('/api/version')
+def get_version():
+    return jsonify({"version": __version__})
