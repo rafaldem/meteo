@@ -9,11 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements.txt pyproject.toml ./
-COPY version.py ./
+COPY requirements.txt .
 
 # Install dependencies
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
@@ -27,4 +26,4 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "backend.app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]

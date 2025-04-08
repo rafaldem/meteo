@@ -7,6 +7,8 @@ import os
 import sys
 import re
 import tempfile
+from pathlib import Path
+
 import pytest
 from unittest.mock import patch, mock_open, MagicMock, call
 
@@ -18,8 +20,7 @@ from update_version import (
     VersionConfig,
     VersionManager,
     FileUpdater,
-    BackendVersionUpdater,
-    FrontendVersionUpdater,
+    VersionUpdater,
     VersionUpdaterCLI
 )
 
@@ -152,30 +153,30 @@ class TestFileUpdater:
         mock_file_content = "content"
         
         with patch("builtins.open", mock_open(read_data=mock_file_content)) as mock_file:
-            content = self.file_updater._read_file("test_file.py")
-            mock_file.assert_called_once_with("test_file.py", "r", encoding="utf-8")
+            content = self.file_updater._read_file(Path("test_file.py"))
+            mock_file.assert_called_once_with(Path("test_file.py"), "r", encoding="utf-8")
             assert content == mock_file_content
 
     def test_read_file_error(self):
         """Test reading a file with error."""
         with patch("builtins.open", side_effect=IOError("Error")):
             with pytest.raises(IOError):
-                self.file_updater._read_file("test_file.py")
+                self.file_updater._read_file(Path("test_file.py"))
 
     def test_write_file(self):
         """Test writing to a file."""
         mock_content = "new content"
         
         with patch("builtins.open", mock_open()) as mock_file:
-            self.file_updater._write_file("test_file.py", mock_content)
-            mock_file.assert_called_once_with("test_file.py", "w", encoding="utf-8")
-            mock_file().write.assert_called_once_with(mock_content)
+            self.file_updater._write_file(Path("test_file.py"), mock_content)
+            mock_file.assert_called_once_with(Path("test_file.py"), "w", encoding="utf-8")
+            mock_file.write.assert_called_once_with(mock_content)
 
     def test_write_file_error(self):
         """Test writing to a file with error."""
         with patch("builtins.open", side_effect=IOError("Error")):
             with pytest.raises(IOError):
-                self.file_updater._write_file("test_file.py", "content")
+                self.file_updater._write_file(Path("test_file.py"), "content")
 
     @patch("os.path.exists")
     def test_update_file(self, mock_exists):
@@ -186,8 +187,8 @@ class TestFileUpdater:
         
         with patch.object(self.file_updater, "_read_file", return_value=mock_content):
             with patch.object(self.file_updater, "_write_file") as mock_write:
-                self.file_updater.update_file("test_file.py", "1.2.3", "2.0.0")
-                mock_write.assert_called_once_with("test_file.py", mock_updated_content)
+                self.file_updater.update_file(Path("test_file.py"), "1.2.3", "2.0.0")
+                mock_write.assert_called_once_with(Path("test_file.py"), mock_updated_content)
 
     @patch("os.path.exists")
     def test_update_file_no_changes(self, mock_exists):
@@ -197,7 +198,7 @@ class TestFileUpdater:
         
         with patch.object(self.file_updater, "_read_file", return_value=mock_content):
             with patch.object(self.file_updater, "_write_file") as mock_write:
-                self.file_updater.update_file("test_file.py", "1.2.3", "2.0.0")
+                self.file_updater.update_file(Path("test_file.py"), "1.2.3", "2.0.0")
                 mock_write.assert_not_called()
 
     @patch("os.path.exists")
@@ -207,18 +208,18 @@ class TestFileUpdater:
         
         with patch.object(self.file_updater, "_read_file") as mock_read:
             with patch.object(self.file_updater, "_write_file") as mock_write:
-                self.file_updater.update_file("nonexistent.py", "1.2.3", "2.0.0")
+                self.file_updater.update_file(Path("nonexistent.py"), "1.2.3", "2.0.0")
                 mock_read.assert_not_called()
                 mock_write.assert_not_called()
 
 
-class TestBackendVersionUpdater:
-    """Test the BackendVersionUpdater class."""
+class TestVersionUpdater:
+    """Test the VersionUpdater class."""
 
     def setup_method(self):
         """Set up test environment."""
         self.version_manager = VersionManager()
-        self.backend_updater = BackendVersionUpdater(self.version_manager)
+        self.version_updater = VersionUpdater(self.version_manager)
 
     @patch("os.path.exists")
     def test_get_current_version(self, mock_exists):
@@ -226,8 +227,8 @@ class TestBackendVersionUpdater:
         mock_exists.return_value = True
         mock_content = 'CURRENT_VERSION = "1.2.3"'
         
-        with patch.object(self.backend_updater, "_read_file", return_value=mock_content):
-            version = self.backend_updater.get_current_version()
+        with patch.object(self.version_updater, "_read_file", return_value=mock_content):
+            version = self.version_updater.get_current_version(Path("test_file.py"))
             assert version.major == 1
             assert version.minor == 2
             assert version.patch == 3
@@ -238,9 +239,9 @@ class TestBackendVersionUpdater:
         mock_exists.return_value = True
         mock_content = 'NO_VERSION_HERE = "something"'
         
-        with patch.object(self.backend_updater, "_read_file", return_value=mock_content):
+        with patch.object(self.version_updater, "_read_file", return_value=mock_content):
             with pytest.raises(ValueError):
-                self.backend_updater.get_current_version()
+                self.version_updater.get_current_version(Path("test_file.py"))
 
     @patch("os.path.exists")
     def test_update_version(self, mock_exists):
@@ -248,121 +249,20 @@ class TestBackendVersionUpdater:
         mock_exists.return_value = True
         
         # Mock the get_current_version method
-        with patch.object(self.backend_updater, "get_current_version", 
-                        return_value=Version(1, 2, 3)):
+        with patch.object(self.version_updater, "get_current_version",
+                          return_value=Version(1, 2, 3)):
             # Mock the update_file method
-            with patch.object(self.backend_updater, "update_file") as mock_update:
+            with patch.object(self.version_updater, "update_file") as mock_update:
                 new_version = Version(2, 0, 0)
-                self.backend_updater.update_version(new_version)
+                self.version_updater.update_version(new_version, "backend")
                 
                 # Check that update_file was called for all backend files
                 expected_calls = [
-                    call(VersionConfig.BACKEND_FILES['version_file'], "1.2.3", "2.0.0")
+                    call(VersionConfig.FILES["backend"]['version.py'], "1.2.3", "2.0.0"),
+                    call(VersionConfig.FILES["backend"]['pyproject.toml'], "1.2.3", "2.0.0")
                 ]
-                for file_path in VersionConfig.BACKEND_FILES['other_files']:
-                    expected_calls.append(call(file_path, "1.2.3", "2.0.0"))
-                
+
                 mock_update.assert_has_calls(expected_calls)
-
-
-class TestFrontendVersionUpdater:
-    """Test the FrontendVersionUpdater class."""
-
-    def setup_method(self):
-        """Set up test environment."""
-        self.version_manager = VersionManager()
-        self.frontend_updater = FrontendVersionUpdater(self.version_manager)
-
-    @patch("os.path.exists")
-    def test_get_current_version_from_package_json(self, mock_exists):
-        """Test getting the current frontend version from package.json."""
-        # Mock package.json exists
-        mock_exists.side_effect = lambda path: path == VersionConfig.FRONTEND_FILES['package_json']
-        
-        mock_content = '{"name": "app", "version": "1.2.3"}'
-        
-        with patch.object(self.frontend_updater, "_read_file", return_value=mock_content):
-            version = self.frontend_updater.get_current_version()
-            assert version.major == 1
-            assert version.minor == 2
-            assert version.patch == 3
-
-    @patch("os.path.exists")
-    def test_get_current_version_from_version_ts(self, mock_exists):
-        """Test getting the current frontend version from version.ts."""
-        # Mock package.json doesn't exist but version.ts does
-        mock_exists.side_effect = lambda path: path != VersionConfig.FRONTEND_FILES['package_json']
-        
-        mock_package_content = '{"name": "app"}'  # No version
-        mock_version_content = 'export const VERSION = "1.2.3";'
-        
-        def mock_read_file(path):
-            if path == VersionConfig.FRONTEND_FILES['package_json']:
-                return mock_package_content
-            return mock_version_content
-        
-        with patch.object(self.frontend_updater, "_read_file", side_effect=mock_read_file):
-            version = self.frontend_updater.get_current_version()
-            assert version.major == 1
-            assert version.minor == 2
-            assert version.patch == 3
-
-    @patch("os.path.exists")
-    def test_get_current_version_not_found(self, mock_exists):
-        """Test getting the current frontend version when not found."""
-        mock_exists.return_value = True
-        
-        mock_package_content = '{"name": "app"}'  # No version
-        mock_version_content = 'export const APP_NAME = "My App";'  # No version
-        
-        def mock_read_file(path):
-            if path == VersionConfig.FRONTEND_FILES['package_json']:
-                return mock_package_content
-            return mock_version_content
-        
-        with patch.object(self.frontend_updater, "_read_file", side_effect=mock_read_file):
-            with pytest.raises(ValueError):
-                self.frontend_updater.get_current_version()
-
-    @pytest.mark.skip
-    @patch("os.path.exists")
-    def test_update_version(self, mock_exists):
-        """Test updating the frontend version."""
-        # Mock both files exist
-        mock_exists.return_value = True
-        
-        # Mock the get_current_version method
-        with patch.object(self.frontend_updater, "get_current_version", 
-                        return_value=Version(1, 2, 3)):
-            # Mock the read_file and write_file methods
-            mock_package_content = '{"name": "app", "version": "1.2.3"}'
-            mock_version_content = 'export const VERSION = "1.2.3";'
-            
-            def mock_read_file(path):
-                if path == VersionConfig.FRONTEND_FILES['package_json']:
-                    return mock_package_content
-                return mock_version_content
-            
-            with patch.object(self.frontend_updater, "_read_file", side_effect=mock_read_file):
-                with patch.object(self.frontend_updater, "_write_file") as mock_write:
-                    new_version = Version(2, 0, 0)
-                    self.frontend_updater.update_version(new_version)
-                    
-                    # Check that write_file was called for both frontend files
-                    expected_package_content = '{"name": "app", "version": "2.0.0"}'
-                    expected_version_content = 'export const VERSION = "2.0.0";'
-                    
-                    expected_calls = [
-                        call(VersionConfig.FRONTEND_FILES['package_json'], expected_package_content),
-                        call(VersionConfig.FRONTEND_FILES['version_ts'], expected_version_content)
-                    ]
-                    
-                    # Check that the calls were made with the expected content
-                    assert mock_write.call_count == 2
-                    for actual_call, expected_call in zip(mock_write.call_args_list, expected_calls):
-                        assert actual_call[0][0] == expected_call[0]
-                        # Strip whitespace for comparison to avoid issues with regex substitution
-                        assert actual_call[0][1].strip() == expected_call[1].strip()
 
 
 class TestVersionUpdaterCLI:
@@ -373,8 +273,7 @@ class TestVersionUpdaterCLI:
         self.cli = VersionUpdaterCLI()
         
         # Mock the updaters
-        self.cli.backend_updater = MagicMock()
-        self.cli.frontend_updater = MagicMock()
+        self.cli.version_updater = MagicMock()
         self.cli.version_manager = MagicMock()
 
     def test_parse_arguments_defaults(self):
@@ -410,8 +309,7 @@ class TestVersionUpdaterCLI:
             exit_code = self.cli.run()
             assert exit_code == 1
             # No update methods should be called
-            self.cli.backend_updater.update_version.assert_not_called()
-            self.cli.frontend_updater.update_version.assert_not_called()
+            self.cli.version_updater.update_version.assert_not_called()
 
     def test_run_update_backend(self):
         """Test running update for backend only."""
@@ -420,20 +318,17 @@ class TestVersionUpdaterCLI:
             current_version = Version(1, 2, 3)
             new_version = Version(1, 2, 4)
             
-            self.cli.backend_updater.get_current_version.return_value = current_version
+            self.cli.version_updater.get_current_version.return_value = current_version
             self.cli.version_manager.bump_version.return_value = new_version
             
             exit_code = self.cli.run()
             
             assert exit_code == 0
-            self.cli.backend_updater.get_current_version.assert_called_once()
+            self.cli.version_updater.get_current_version.assert_called_once()
             self.cli.version_manager.bump_version.assert_called_once_with(
                 current_version, Component.PATCH, BumpType.INCREMENT, None
             )
-            self.cli.backend_updater.update_version.assert_called_once_with(new_version)
-            # Frontend methods should not be called
-            self.cli.frontend_updater.get_current_version.assert_not_called()
-            self.cli.frontend_updater.update_version.assert_not_called()
+            self.cli.version_updater.update_version.assert_called_once_with(new_version)
 
     def test_run_update_frontend(self):
         """Test running update for frontend only."""
@@ -442,20 +337,17 @@ class TestVersionUpdaterCLI:
             current_version = Version(1, 2, 3)
             new_version = Version(1, 2, 4)
             
-            self.cli.frontend_updater.get_current_version.return_value = current_version
+            self.cli.version_updater.get_current_version.return_value = current_version
             self.cli.version_manager.bump_version.return_value = new_version
             
             exit_code = self.cli.run()
             
             assert exit_code == 0
-            self.cli.frontend_updater.get_current_version.assert_called_once()
+            self.cli.version_updater.get_current_version.assert_called_once()
             self.cli.version_manager.bump_version.assert_called_once_with(
                 current_version, Component.PATCH, BumpType.INCREMENT, None
             )
-            self.cli.frontend_updater.update_version.assert_called_once_with(new_version)
-            # Backend methods should not be called
-            self.cli.backend_updater.get_current_version.assert_not_called()
-            self.cli.backend_updater.update_version.assert_not_called()
+            self.cli.version_updater.update_version.assert_called_once_with(new_version)
 
     def test_run_update_both(self):
         """Test running update for both backend and frontend."""
@@ -465,18 +357,16 @@ class TestVersionUpdaterCLI:
             frontend_version = Version(1, 2, 3)
             new_version = Version(1, 2, 4)
             
-            self.cli.backend_updater.get_current_version.return_value = backend_version
-            self.cli.frontend_updater.get_current_version.return_value = frontend_version
+            self.cli.version_updater.get_current_version.return_value = backend_version
+            self.cli.version_updater.get_current_version.return_value = frontend_version
             self.cli.version_manager.bump_version.return_value = new_version
             
             exit_code = self.cli.run()
             
             assert exit_code == 0
             # Both updaters should be called
-            self.cli.backend_updater.get_current_version.assert_called_once()
-            self.cli.backend_updater.update_version.assert_called_once_with(new_version)
-            self.cli.frontend_updater.get_current_version.assert_called_once()
-            self.cli.frontend_updater.update_version.assert_called_once_with(new_version)
+            self.cli.version_updater.get_current_version.assert_called_once()
+            self.cli.version_updater.update_version.assert_called_once_with(new_version)
             # Version manager should be called twice
             assert self.cli.version_manager.bump_version.call_count == 2
 
@@ -484,46 +374,43 @@ class TestVersionUpdaterCLI:
         """Test handling backend update errors."""
         with patch("sys.argv", ["update_version.py", "--component", "backend"]):
             # Mock an error in backend update
-            self.cli.backend_updater.get_current_version.side_effect = ValueError("Error")
+            self.cli.version_updater.get_current_version.side_effect = ValueError("Error")
             
             exit_code = self.cli.run()
             
             assert exit_code == 1
-            self.cli.backend_updater.get_current_version.assert_called_once()
-            self.cli.backend_updater.update_version.assert_not_called()
+            self.cli.version_updater.get_current_version.assert_called_once()
+            self.cli.version_updater.update_version.assert_not_called()
 
     def test_run_frontend_error(self):
         """Test handling frontend update errors."""
         with patch("sys.argv", ["update_version.py", "--component", "frontend"]):
             # Mock an error in frontend update
-            self.cli.frontend_updater.get_current_version.side_effect = ValueError("Error")
+            self.cli.version_updater.get_current_version.side_effect = ValueError("Error")
             
             exit_code = self.cli.run()
             
             assert exit_code == 1
-            self.cli.frontend_updater.get_current_version.assert_called_once()
-            self.cli.frontend_updater.update_version.assert_not_called()
+            self.cli.version_updater.get_current_version.assert_called_once()
+            self.cli.version_updater.update_version.assert_not_called()
 
     def test_run_both_backend_error(self):
         """Test handling backend error when updating both components."""
         with patch("sys.argv", ["update_version.py", "--component", "both"]):
             # Mock an error in backend but success in frontend
-            self.cli.backend_updater.get_current_version.side_effect = ValueError("Error")
+            self.cli.version_updater.get_current_version.side_effect = ValueError("Error")
             
             frontend_version = Version(1, 2, 3)
             new_version = Version(1, 2, 4)
-            self.cli.frontend_updater.get_current_version.return_value = frontend_version
+            self.cli.version_updater.get_current_version.return_value = frontend_version
             self.cli.version_manager.bump_version.return_value = new_version
             
             exit_code = self.cli.run()
             
             # Should still succeed since we're updating both
             assert exit_code == 0
-            self.cli.backend_updater.get_current_version.assert_called_once()
-            self.cli.backend_updater.update_version.assert_not_called()
-            # Frontend should still be updated
-            self.cli.frontend_updater.get_current_version.assert_called_once()
-            self.cli.frontend_updater.update_version.assert_called_once_with(new_version)
+            self.cli.version_updater.get_current_version.assert_called_once()
+            self.cli.version_updater.update_version.assert_not_called()
 
 
 class TestIntegration:
@@ -532,60 +419,65 @@ class TestIntegration:
     def setup_method(self):
         """Set up test environment with temporary files."""
         # Create temp directory
-        self.temp_dir = tempfile.TemporaryDirectory()
-        
+        self.temp_dir = tempfile.TemporaryDirectory(dir=Path(__file__).parent)
+
+        # Create version.py
+        self.setup_path = Path(self.temp_dir.name, "setup.py")
+        with self.setup_path.open("w") as f:
+            f.write(
+                'setup(\n'
+                '   name="temperature_monitor"\n'
+                '   version="0.1.0",  # This will be managed by the version updater\n'
+            )
+
         # Create backend files
-        self.backend_dir = os.path.join(self.temp_dir.name, "backend")
-        os.makedirs(self.backend_dir)
-        
-        # Create config.py
-        self.config_path = os.path.join(self.backend_dir, "config.py")
-        with open(self.config_path, "w") as f:
-            f.write('CURRENT_VERSION = "1.2.3"\n')
-        
-        # Create __init__.py
-        self.init_path = os.path.join(self.backend_dir, "__init__.py")
-        with open(self.init_path, "w") as f:
-            f.write('"""Backend module version 1.2.3"""\n')
-        
-        # Create setup.py
-        self.setup_path = os.path.join(self.temp_dir.name, "setup.py")
-        with open(self.setup_path, "w") as f:
-            f.write('setup(name="app", version="1.2.3")\n')
-        
+        self.backend_dir = Path(self.temp_dir.name, "backend")
+        self.backend_dir.mkdir(parents=True, exist_ok=True)
+        self.backend_version_path = self.backend_dir / "version.py"
+        self.backend_pyproject_path = self.backend_dir / "pyproject.toml"
+        with self.backend_version_path.open("w") as f:
+            f.write('__version__ = "0.1.0"  # Keep this consistent with pyproject.toml\n')
+        with self.backend_pyproject_path.open("w") as f:
+            f.write(
+                '[project]\n'
+                'name = "temperature-monitor-backend"\n'
+                'version = "0.1.0"\n'
+                'description = "Temperature monitoring application (backend)"\n'
+            )
+
         # Create frontend files
-        self.frontend_dir = os.path.join(self.temp_dir.name, "frontend")
-        os.makedirs(os.path.join(self.frontend_dir, "src"))
-        
-        # Create package.json
-        self.package_path = os.path.join(self.frontend_dir, "package.json")
-        with open(self.package_path, "w") as f:
-            f.write('{"name": "app", "version": "1.2.3"}\n')
-        
-        # Create version.ts
-        self.version_ts_path = os.path.join(self.frontend_dir, "src", "version.ts")
-        with open(self.version_ts_path, "w") as f:
-            f.write('export const VERSION = "1.2.3";\n')
-        
+        self.frontend_dir = Path(self.temp_dir.name, "frontend")
+        self.frontend_dir.mkdir(parents=True, exist_ok=True)
+        self.frontend_version_path = self.backend_dir / "version.py"
+        self.frontend_pyproject_path = self.backend_dir / "pyproject.toml"
+        with self.frontend_version_path.open("w") as f:
+            f.write('__version__ = "0.1.0"  # Keep this consistent with pyproject.toml\n')
+        with self.frontend_pyproject_path.open("w") as f:
+            f.write(
+                '[project]\n'
+                'name = "temperature-monitor-frontend"\n'
+                'version = "0.1.0"\n'
+                'description = "Temperature monitoring application (frontend)"\n'
+            )
+
         # Patch file paths in VersionConfig
-        self.original_backend_files = VersionConfig.BACKEND_FILES
-        self.original_frontend_files = VersionConfig.FRONTEND_FILES
+        self.original_backend_files = VersionConfig.FILES["backend"]
+        self.original_frontend_files = VersionConfig.FILES["frontend"]
         
         VersionConfig.BACKEND_FILES = {
-            'version_file': self.config_path,
-            'other_files': [self.init_path, self.setup_path]
+            'version_file': self.backend_version_path,
+            'pyproject_file': self.backend_pyproject_path,
         }
-        
         VersionConfig.FRONTEND_FILES = {
-            'package_json': self.package_path,
-            'version_ts': self.version_ts_path
+            'version_file': self.frontend_version_path,
+            'pyproject_file': self.frontend_pyproject_path,
         }
 
     def teardown_method(self):
         """Clean up test environment."""
         # Restore original file paths
-        VersionConfig.BACKEND_FILES = self.original_backend_files
-        VersionConfig.FRONTEND_FILES = self.original_frontend_files
+        VersionConfig.FILES["backend"] = self.original_backend_files
+        VersionConfig.FILES["frontend"] = self.original_frontend_files
         
         # Remove temp directory
         self.temp_dir.cleanup()
@@ -600,10 +492,10 @@ class TestIntegration:
             assert exit_code == 0
             
             # Check that files were updated
-            with open(self.config_path) as f:
+            with open(self.backend_version_path) as f:
                 assert 'CURRENT_VERSION = "1.2.4"' in f.read()
             
-            with open(self.init_path) as f:
+            with open(self.backend_pyproject_path) as f:
                 assert '"""Backend module version 1.2.4"""' in f.read()
             
             with open(self.setup_path) as f:
@@ -643,10 +535,10 @@ class TestIntegration:
             assert exit_code == 0
             
             # Check that all files were updated to 2.0.0
-            with open(self.config_path) as f:
+            with open(self.version_path) as f:
                 assert 'CURRENT_VERSION = "2.0.0"' in f.read()
             
-            with open(self.init_path) as f:
+            with open(self.backend_pyproject_path) as f:
                 assert '"""Backend module version 2.0.0"""' in f.read()
             
             with open(self.setup_path) as f:
@@ -674,7 +566,7 @@ class TestIntegration:
             assert exit_code == 0
             
             # Check that all files were updated to 1.5.3
-            with open(self.config_path) as f:
+            with open(self.version_path) as f:
                 assert 'CURRENT_VERSION = "1.5.3"' in f.read()
             
             with open(self.package_path) as f:
