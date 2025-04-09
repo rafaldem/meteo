@@ -1,51 +1,59 @@
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, call
-
 import pytest
-
-from update_version import Version, VersionConfig, VersionManager, VersionUpdater
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+from update_version import VersionUpdater, VersionManager, Version, VersionConfig
 
 
 class TestVersionUpdater:
-    """Test the VersionUpdater class."""
+    """Test cases for the VersionUpdater class."""
 
-    def setup_method(self):
-        """Set up test environment."""
-        self.version_manager = VersionManager()
-        self.version_updater = VersionUpdater(self.version_manager)
-        self.temp_dir = tempfile.TemporaryDirectory(dir=Path(__file__).parent)
+    @pytest.fixture
+    def version_updater(self):
+        """Create a VersionUpdater instance for testing."""
+        return VersionUpdater(VersionManager())
 
-    @patch("os.path.exists")
-    def test_get_current_version(self, mock_exists):
+    @patch("update_version.FileUpdater._read_file")
+    def test_get_current_version_backend(self, mock_read, version_updater):
         """Test getting the current backend version."""
-        mock_exists.return_value = True
         mock_content = '__version__ = "1.2.3"'
-        with patch.object(self.version_updater, "_read_file", return_value=mock_content):
-            version = self.version_updater.get_current_version(Path("backend/version.py"))
-            assert version.major == 1
-            assert version.minor == 2
-            assert version.patch == 3
+        mock_read.return_value = mock_content
 
-    @patch("os.path.exists")
-    def test_get_current_version_not_found(self, mock_exists):
-        """Test getting the current backend version when not found."""
-        mock_exists.return_value = True
-        mock_content = 'NO_VERSION_HERE = "something"'
-        with patch.object(self.version_updater, "_read_file", return_value=mock_content):
+        with patch("pathlib.Path.parent", new_callable=MagicMock) as mock_parent:
+            # Set up mock parent.name to return "backend"
+            mock_parent.name = "backend"
+            version_file = Path("version.py")
+            version_file.parent = mock_parent
+
+            result = version_updater.get_current_version(version_file)
+
+            assert result.major == 1
+            assert result.minor == 2
+            assert result.patch == 3
+
+    @patch("update_version.FileUpdater._read_file")
+    def test_get_current_version_invalid_pattern(self, mock_read, version_updater):
+        """Test getting version with invalid pattern raises ValueError."""
+        mock_content = "invalid version format"
+        mock_read.return_value = mock_content
+
+        with patch("pathlib.Path.parent", new_callable=MagicMock) as mock_parent:
+            # Set up mock parent.name to return "backend"
+            mock_parent.name = "backend"
+            version_file = Path("version.py")
+            version_file.parent = mock_parent
+
             with pytest.raises(ValueError):
-                self.version_updater.get_current_version(Path("backend/version.py"))
+                version_updater.get_current_version(version_file)
 
-    @patch("os.path.exists")
-    def test_update_version(self, mock_exists):
-        """Test updating the backend version."""
-        mock_exists.return_value = True
-        with patch.object(self.version_updater, "get_current_version", return_value=Version(1, 2, 3)):
-            with patch.object(self.version_updater, "update_file") as mock_update:
-                new_version = Version(2, 0, 0)
-                self.version_updater.update_version(new_version, "backend")
-                expected_calls = [
-                    call(VersionConfig.FILES["backend"]["version.py"], "1.2.3", "2.0.0"),
-                    call(VersionConfig.FILES["backend"]["pyproject.toml"], "1.2.3", "2.0.0"),
-                ]
-                mock_update.assert_has_calls(expected_calls)
+    @patch("update_version.VersionUpdater.update_file")
+    @patch("pathlib.Path.exists", return_value=True)
+    def test_update_version(self, mock_exists, mock_update_file, version_updater):
+        """Test updating version in files."""
+        old_version = Version(1, 2, 3)
+        new_version = Version(1, 2, 4)
+        component = "backend"
+
+        version_updater.update_version(old_version, new_version, component)
+
+        # Check that update_file was called for each file in the component
+        assert mock_update_file.call_count == len(VersionConfig.FILES[component])

@@ -5,26 +5,42 @@ Version management utility for updating version numbers across backend and front
 
 import re
 import sys
-import argparse
 import logging
+import argparse
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Tuple, Optional, List, Union, Any
 
 
 # Configure logging
-# logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(formatter)
-file_handler = logging.FileHandler("version_updater.log")
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-logger.addHandler(file_handler)
+
+
+def setup_logging(log_file: str = "version_updater.log", log_level: int = logging.INFO) -> None:
+    """
+    Set up logging configuration.
+
+    Args:
+        log_file: Path to the log file
+        log_level: Logging level
+    """
+    logger.setLevel(log_level)
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(formatter)
+
+    # File handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+
+    # Add handlers
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
 
 
 def log_debug_return(func):
@@ -69,29 +85,46 @@ class Version:
         return f"{self.major}.{self.minor}.{self.patch}"
 
 
+@dataclass
+class VersionPattern:
+    """Class for version patterns used in different file types."""
+
+    base: str = r"(\d+)\.(\d+)\.(\d+)"
+    version_py: str = r'__version__\s*=\s*["\']' + base + r'["\']'
+    pyproject: str = r'version\s*=\s*["\']' + base + r'["\']'
+    setup: str = r'version\s*=\s*["\']' + base + r'["\']'
+
+
+@dataclass
+class FileInfo:
+    """Information about a file containing version information."""
+
+    path: Path
+    pattern: str
+
+
+@dataclass
 class VersionConfig:
     """Configuration for version patterns and file paths."""
 
-    VERSION_PATTERN = r"(\d+)\.(\d+)\.(\d+)"
-    VERSION_PY_PATTERN = r'__version__\s*=\s*["\']' + VERSION_PATTERN + r'["\']'
-    PYPROJECT_PATTERN = r'version\s*=\s*["\']' + VERSION_PATTERN + r'["\']'
-    SETUP_PATTERN = r'version\s*=\s*["\']' + VERSION_PATTERN + r'["\']'
+    project_root: Path = field(default_factory=lambda: Path(__file__).parent.parent.resolve())
+    patterns: VersionPattern = field(default_factory=VersionPattern)
 
-    PROJECT_LOCATION = Path(__file__).parent.parent.resolve()
-
-    FILES = {
-        "backend": {
-            "version.py": ((PROJECT_LOCATION / "backend/version.py").name, VERSION_PY_PATTERN),
-            "pyproject.toml": ("backend/pyproject.toml", PYPROJECT_PATTERN),
-        },
-        "frontend": {
-            "version.py": ((PROJECT_LOCATION / "frontend/version.py").name, VERSION_PY_PATTERN),
-            "pyproject.toml": ("frontend/pyproject.toml", PYPROJECT_PATTERN),
-        },
-        "setup": {
-            "setup.py": ("setup.py", SETUP_PATTERN),
-        },
-    }
+    def __post_init__(self):
+        """Initialize file paths after initialization."""
+        self.files: Dict[str, Dict[str, FileInfo]] = {
+            "backend": {
+                "version.py": FileInfo(self.project_root / "backend/version.py", self.patterns.version_py),
+                "pyproject.toml": FileInfo(self.project_root / "backend/pyproject.toml", self.patterns.pyproject),
+            },
+            "frontend": {
+                "version.py": FileInfo(self.project_root / "frontend/version.py", self.patterns.version_py),
+                "pyproject.toml": FileInfo(self.project_root / "frontend/pyproject.toml", self.patterns.pyproject),
+            },
+            "setup": {
+                "setup.py": FileInfo(self.project_root / "setup.py", self.patterns.setup),
+            },
+        }
 
 
 class VersionManager:
@@ -99,9 +132,7 @@ class VersionManager:
 
     @staticmethod
     @log_debug_return
-    def parse_version(
-        version_string: str,
-    ) -> Version:
+    def parse_version(version_string: str) -> Version:
         """
         Parse a version string into a Version object.
 
@@ -114,7 +145,8 @@ class VersionManager:
         Raises:
             ValueError: If the version string has an invalid format
         """
-        match = re.match(VersionConfig.VERSION_PATTERN, version_string)
+        pattern = VersionPattern().base
+        match = re.match(pattern, version_string)
         if not match:
             raise ValueError(f"Invalid version format: {version_string}")
 
@@ -144,6 +176,9 @@ class VersionManager:
 
         Returns:
             A new Version object with the updated component
+
+        Raises:
+            ValueError: If the bump operation is invalid
         """
         major, minor, patch = version.major, version.minor, version.patch
 
@@ -188,12 +223,29 @@ class FileUpdater:
     """Base class for updating version in files."""
 
     def __init__(self, version_manager: VersionManager):
+        """
+        Initialize the file updater.
+
+        Args:
+            version_manager: The version manager instance
+        """
         self.version_manager = version_manager
 
     @staticmethod
     @log_debug_return
     def _read_file(file_path: Path) -> str:
-        """Read file content safely."""
+        """
+        Read file content safely.
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            The content of the file
+
+        Raises:
+            IOError: If the file cannot be read
+        """
         try:
             with file_path.open("r", encoding="utf-8") as file:
                 return file.read()
@@ -203,7 +255,16 @@ class FileUpdater:
 
     @staticmethod
     def _write_file(file_path: Path, content: str) -> None:
-        """Write content to file safely."""
+        """
+        Write content to file safely.
+
+        Args:
+            file_path: Path to the file
+            content: Content to write
+
+        Raises:
+            IOError: If the file cannot be written
+        """
         try:
             with file_path.open("w", encoding="utf-8") as file:
                 file.write(content)
@@ -214,14 +275,20 @@ class FileUpdater:
             raise IOError(f"Could not write to file {file_path}: {e}")
 
     def update_file(self, file_path: Path, old_version: str, new_version: str) -> None:
-        """Update version in a single file."""
+        """
+        Update version in a single file.
+
+        Args:
+            file_path: Path to the file
+            old_version: Old version string to replace
+            new_version: New version string
+        """
         if not file_path.exists():
             logger.warning(f"File {file_path} does not exist, skipping")
             return
 
         content = self._read_file(file_path)
         updated_content = content.replace(old_version, new_version)
-        logger.debug(f"Updated content:\n{updated_content}")
 
         if content == updated_content:
             logger.warning(f"No version information found in {file_path}")
@@ -233,10 +300,24 @@ class FileUpdater:
 class VersionUpdater(FileUpdater):
     """Updates version files."""
 
+    def __init__(self, version_manager: VersionManager, config: Optional[VersionConfig] = None):
+        """
+        Initialize the version updater.
+
+        Args:
+            version_manager: The version manager instance
+            config: The version configuration
+        """
+        super().__init__(version_manager)
+        self.config = config or VersionConfig()
+
     @log_debug_return
     def get_current_version(self, version_file: Path) -> Version:
         """
-        Get current version.
+        Get current version from a file.
+
+        Args:
+            version_file: Path to the version file
 
         Returns:
             The current Version
@@ -249,50 +330,89 @@ class VersionUpdater(FileUpdater):
             content = self._read_file(version_file)
             component = version_file.parent.name
 
-            file_path, version_file_pattern = VersionConfig.FILES[component][version_file.name]
-            match = re.search(version_file_pattern, content)
+            # Get the pattern for this file
+            file_info = None
+            for component_name, files in self.config.files.items():
+                for file_key, info in files.items():
+                    if Path(info.path).name == version_file.name:
+                        file_info = info
+                        break
+                if file_info:
+                    break
+
+            if not file_info:
+                raise ValueError(f"Unknown file: {version_file}")
+
+            # Extract version using the pattern
+            match = re.search(file_info.pattern, content)
             if not match:
                 raise ValueError(f"Could not find version information in {version_file}")
 
-            version_string_match = re.search(VersionConfig.VERSION_PATTERN, match.group(0))
-            version_string = version_string_match.group(0) if version_string_match else None
+            # Extract the actual version string
+            version_pattern = VersionPattern().base
+            version_string_match = re.search(version_pattern, match.group(0))
+            if not version_string_match:
+                raise ValueError(f"Could not extract version from {match.group(0)}")
+
+            version_string = version_string_match.group(0)
             logger.debug(f"Found version: {version_string}")
             return self.version_manager.parse_version(version_string)
+
         except (IOError, ValueError) as e:
-            logger.error(f"Error getting current backend version: {e}")
+            logger.error(f"Error getting current version from {version_file}: {e}")
             raise
 
     def update_version(self, old_version: Version, new_version: Version, component: str) -> None:
         """
-        Update version in files.
+        Update version in files for a component.
 
         Args:
+            old_version: The current version
             new_version: The new version to set
-            :param old_version:
-            :param new_version:
-            :param component:
+            component: Which component to update (backend, frontend, both)
         """
         old_version_str = self.version_manager.format_version(old_version)
         new_version_str = self.version_manager.format_version(new_version)
 
-        for file_key, (file_path_str, version_pattern) in VersionConfig.FILES[component].items():
-            file_path = Path(file_path_str)
+        # Get files for the component
+        component_files = self.config.files.get(component, {})
+        if not component_files:
+            logger.warning(f"No files defined for component: {component}")
+            return
+
+        for file_key, file_info in component_files.items():
+            file_path = Path(file_info.path)
             if file_path.exists():
                 logger.info(f"Updating {file_key} version from {old_version_str} to {new_version_str}")
                 self.update_file(file_path, old_version_str, new_version_str)
+            else:
+                logger.warning(f"File {file_path} does not exist, skipping")
 
 
 class VersionUpdaterCLI:
     """Command-line interface for version updating."""
 
-    def __init__(self):
+    def __init__(self, config: Optional[VersionConfig] = None):
+        """
+        Initialize the CLI.
+
+        Args:
+            config: The version configuration
+        """
+        setup_logging()
+        self.config = config or VersionConfig()
         self.version_manager = VersionManager()
-        self.version_updater = VersionUpdater(self.version_manager)
+        self.version_updater = VersionUpdater(self.version_manager, self.config)
 
     @staticmethod
     @log_debug_return
     def parse_arguments() -> argparse.Namespace:
-        """Parse command line arguments."""
+        """
+        Parse command line arguments.
+
+        Returns:
+            Parsed arguments
+        """
         parser = argparse.ArgumentParser(description="Version update utility for backend and frontend components.")
 
         parser.add_argument(
@@ -316,7 +436,18 @@ class VersionUpdaterCLI:
             help="How to modify the version (default: increment)",
         )
 
-        parser.add_argument("--value", type=int, help="Value to set (required for set action)")
+        parser.add_argument(
+            "--value",
+            type=int,
+            help="Value to set (required for set action)",
+        )
+
+        parser.add_argument(
+            "--log-level",
+            choices=["debug", "info", "warning", "error", "critical"],
+            default="info",
+            help="Logging level (default: info)",
+        )
 
         return parser.parse_args()
 
@@ -330,9 +461,13 @@ class VersionUpdaterCLI:
         try:
             args = self.parse_arguments()
 
+            # Set log level
+            log_level = getattr(logging, args.log_level.upper())
+            setup_logging(log_level=log_level)
+
             # Convert string arguments to enums
             bump_type = BumpType.SET if args.action == "set" else BumpType.INCREMENT
-            component = getattr(Component, args.bump_type.upper())
+            component_enum = getattr(Component, args.bump_type.upper())
 
             # Validate arguments
             if bump_type == BumpType.SET and args.value is None:
@@ -342,10 +477,19 @@ class VersionUpdaterCLI:
             # Update backend version
             if args.component in ["backend", "both"]:
                 try:
-                    version_file = Path(VersionConfig.FILES["backend"]["version.py"][0])
-                    current_version = self.version_updater.get_current_version(version_file)
-                    new_version = self.version_manager.bump_version(current_version, component, bump_type, args.value)
-                    self.version_updater.update_version(current_version, new_version, args.component)
+                    # Get the backend version file path
+                    backend_version_file = Path(self.config.files["backend"]["version.py"].path)
+                    if not backend_version_file.exists():
+                        logger.error(f"Backend version file {backend_version_file} does not exist")
+                        if args.component == "backend":
+                            return 1
+                    else:
+                        # Update the backend version
+                        current_version = self.version_updater.get_current_version(backend_version_file)
+                        new_version = self.version_manager.bump_version(
+                            current_version, component_enum, bump_type, args.value
+                        )
+                        self.version_updater.update_version(current_version, new_version, "backend")
                 except Exception as e:
                     logger.error(f"Error updating backend version: {e}")
                     if args.component == "backend":
@@ -354,14 +498,40 @@ class VersionUpdaterCLI:
             # Update frontend version
             if args.component in ["frontend", "both"]:
                 try:
-                    version_file = Path(VersionConfig.FILES["frontend"]["version.py"][0])
-                    current_version = self.version_updater.get_current_version(version_file)
-                    new_version = self.version_manager.bump_version(current_version, component, bump_type, args.value)
-                    self.version_updater.update_version(current_version, new_version, args.component)
+                    # Get the frontend version file path
+                    frontend_version_file = Path(self.config.files["frontend"]["version.py"].path)
+                    if not frontend_version_file.exists():
+                        logger.error(f"Frontend version file {frontend_version_file} does not exist")
+                        if args.component == "frontend":
+                            return 1
+                    else:
+                        # Update the frontend version
+                        current_version = self.version_updater.get_current_version(frontend_version_file)
+                        new_version = self.version_manager.bump_version(
+                            current_version, component_enum, bump_type, args.value
+                        )
+                        self.version_updater.update_version(current_version, new_version, "frontend")
                 except Exception as e:
                     logger.error(f"Error updating frontend version: {e}")
                     if args.component == "frontend":
                         return 1
+
+            # Update setup.py if both components are updated
+            if args.component == "both":
+                try:
+                    # Get the setup.py file path
+                    setup_file = Path(self.config.files["setup"]["setup.py"].path)
+                    if setup_file.exists():
+                        # We use the backend version for the setup.py file
+                        backend_version_file = Path(self.config.files["backend"]["version.py"].path)
+                        current_version = self.version_updater.get_current_version(backend_version_file)
+                        new_version = self.version_manager.bump_version(
+                            current_version, component_enum, bump_type, args.value
+                        )
+                        self.version_updater.update_version(current_version, new_version, "setup")
+                except Exception as e:
+                    logger.error(f"Error updating setup.py version: {e}")
+                    # Don't fail the entire process for setup.py
 
             logger.info("Version update completed successfully")
             return 0

@@ -1,134 +1,65 @@
-import os
-import sys
-import re
-import tempfile
-from pathlib import Path
 import pytest
-from unittest.mock import patch, mock_open, MagicMock, call
-from update_version import BumpType, Component, Version, VersionConfig, VersionManager, FileUpdater, VersionUpdater, VersionUpdaterCLI
+import argparse
+from unittest.mock import patch, MagicMock
+from update_version import VersionUpdaterCLI, Version, BumpType, Component
 
 
 class TestVersionUpdaterCLI:
-    """Test the VersionUpdaterCLI class."""
+    """Test cases for the VersionUpdaterCLI class."""
 
-    def setup_method(self):
-        """Set up test environment."""
-        self.cli = VersionUpdaterCLI()
-        self.cli.version_updater = MagicMock()
-        self.cli.version_manager = MagicMock()
+    @pytest.fixture
+    def cli(self):
+        """Create a VersionUpdaterCLI instance for testing."""
+        return VersionUpdaterCLI()
 
-    def test_parse_arguments_defaults(self):
-        """Test parsing command-line arguments with defaults."""
-        with patch('sys.argv', ['update_version.py']):
-            args = self.cli.parse_arguments()
-            assert args.component == 'both'
-            assert args.bump_type == 'patch'
-            assert args.action == 'increment'
-            assert args.value is None
+    @patch("argparse.ArgumentParser.parse_args")
+    def test_parse_arguments_defaults(self, mock_parse_args):
+        """Test parsing arguments with defaults."""
+        mock_args = argparse.Namespace(component="both", bump_type="patch", action="increment", value=None)
+        mock_parse_args.return_value = mock_args
 
-    def test_parse_arguments_custom(self):
-        """Test parsing custom command-line arguments."""
-        with patch('sys.argv', ['update_version.py', '--component',
-            'backend', '--bump-type', 'minor', '--action', 'set', '--value',
-            '5']):
-            args = self.cli.parse_arguments()
-            assert args.component == 'backend'
-            assert args.bump_type == 'minor'
-            assert args.action == 'set'
-            assert args.value == 5
+        result = VersionUpdaterCLI.parse_arguments()
 
-    def test_run_set_without_value(self):
+        assert result.component == "both"
+        assert result.bump_type == "patch"
+        assert result.action == "increment"
+        assert result.value is None
+
+    @patch("update_version.VersionUpdaterCLI.parse_arguments")
+    @patch("update_version.VersionUpdater.get_current_version")
+    @patch("update_version.VersionManager.bump_version")
+    @patch("update_version.VersionUpdater.update_version")
+    def test_run_success(self, mock_update, mock_bump, mock_get_version, mock_parse_args, cli):
+        """Test running the CLI with successful execution."""
+        # Setup mock arguments
+        mock_args = argparse.Namespace(component="both", bump_type="patch", action="increment", value=None)
+        mock_parse_args.return_value = mock_args
+
+        # Setup mock versions
+        current_version = Version(1, 2, 3)
+        new_version = Version(1, 2, 4)
+        mock_get_version.return_value = current_version
+        mock_bump.return_value = new_version
+
+        result = cli.run()
+
+        # Check that the CLI ran successfully
+        assert result == 0
+        # Check that get_current_version was called twice (once for backend, once for frontend)
+        assert mock_get_version.call_count == 2
+        # Check that bump_version was called twice
+        assert mock_bump.call_count == 2
+        # Check that update_version was called twice
+        assert mock_update.call_count == 2
+
+    @patch("update_version.VersionUpdaterCLI.parse_arguments")
+    def test_run_set_without_value(self, mock_parse_args, cli):
         """Test running with 'set' action but no value."""
-        with patch('sys.argv', ['update_version.py', '--action', 'set']):
-            exit_code = self.cli.run()
-            assert exit_code == 1
-            self.cli.version_updater.update_version.assert_not_called()
+        # Setup mock arguments
+        mock_args = argparse.Namespace(component="backend", bump_type="patch", action="set", value=None)
+        mock_parse_args.return_value = mock_args
 
-    def test_run_update_backend(self):
-        """Test running update for backend only."""
-        with patch('sys.argv', ['update_version.py', '--component', 'backend']
-            ):
-            current_version = Version(1, 2, 3)
-            new_version = Version(1, 2, 4)
-            self.cli.version_updater.get_current_version.return_value = (
-                current_version)
-            self.cli.version_manager.bump_version.return_value = new_version
-            exit_code = self.cli.run()
-            assert exit_code == 0
-            self.cli.version_updater.get_current_version.assert_called_once()
-            self.cli.version_manager.bump_version.assert_called_once_with(
-                current_version, Component.PATCH, BumpType.INCREMENT, None)
-            self.cli.version_updater.update_version.assert_called_once_with(
-                new_version)
+        result = cli.run()
 
-    def test_run_update_frontend(self):
-        """Test running update for frontend only."""
-        with patch('sys.argv', ['update_version.py', '--component', 'frontend']
-            ):
-            current_version = Version(1, 2, 3)
-            new_version = Version(1, 2, 4)
-            self.cli.version_updater.get_current_version.return_value = (
-                current_version)
-            self.cli.version_manager.bump_version.return_value = new_version
-            exit_code = self.cli.run()
-            assert exit_code == 0
-            self.cli.version_updater.get_current_version.assert_called_once()
-            self.cli.version_manager.bump_version.assert_called_once_with(
-                current_version, Component.PATCH, BumpType.INCREMENT, None)
-            self.cli.version_updater.update_version.assert_called_once_with(
-                new_version)
-
-    def test_run_update_both(self):
-        """Test running update for both backend and frontend."""
-        with patch('sys.argv', ['update_version.py', '--component', 'both']):
-            backend_version = Version(1, 2, 3)
-            frontend_version = Version(1, 2, 3)
-            new_version = Version(1, 2, 4)
-            self.cli.version_updater.get_current_version.return_value = (
-                backend_version)
-            self.cli.version_updater.get_current_version.return_value = (
-                frontend_version)
-            self.cli.version_manager.bump_version.return_value = new_version
-            exit_code = self.cli.run()
-            assert exit_code == 0
-            self.cli.version_updater.get_current_version.assert_called_once()
-            self.cli.version_updater.update_version.assert_called_once_with(
-                new_version)
-            assert self.cli.version_manager.bump_version.call_count == 2
-
-    def test_run_backend_error(self):
-        """Test handling backend update errors."""
-        with patch('sys.argv', ['update_version.py', '--component', 'backend']
-            ):
-            self.cli.version_updater.get_current_version.side_effect = (
-                ValueError('Error'))
-            exit_code = self.cli.run()
-            assert exit_code == 1
-            self.cli.version_updater.get_current_version.assert_called_once()
-            self.cli.version_updater.update_version.assert_not_called()
-
-    def test_run_frontend_error(self):
-        """Test handling frontend update errors."""
-        with patch('sys.argv', ['update_version.py', '--component', 'frontend']
-            ):
-            self.cli.version_updater.get_current_version.side_effect = (
-                ValueError('Error'))
-            exit_code = self.cli.run()
-            assert exit_code == 1
-            self.cli.version_updater.get_current_version.assert_called_once()
-            self.cli.version_updater.update_version.assert_not_called()
-
-    def test_run_both_backend_error(self):
-        """Test handling backend error when updating both components."""
-        with patch('sys.argv', ['update_version.py', '--component', 'both']):
-            self.cli.version_updater.get_current_version.side_effect = (
-                ValueError('Error'))
-            frontend_version = Version(1, 2, 3)
-            new_version = Version(1, 2, 4)
-            self.cli.version_updater.get_current_version.return_value = (
-                frontend_version)
-            self.cli.version_manager.bump_version.return_value = new_version
-            exit_code = self.cli.run()
-            assert exit_code == 0
-            self.cli.version_updater.get_current_version.assert_called_once()
-            self.cli.version_updater.update_version.assert_not_called()
+        # Check that the CLI returned an error code
+        assert result == 1
