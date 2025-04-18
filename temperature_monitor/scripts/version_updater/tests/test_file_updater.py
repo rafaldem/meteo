@@ -34,29 +34,45 @@ class TestFileUpdater:
 
         file_updater._write_file(test_file, test_content)
 
-        # Check that the file was opened for writing
         mock_file.assert_called_once_with("w", encoding="utf-8")
-        # Check that write was called with the content
         mock_file().write.assert_called_once_with(test_content)
+
+    @patch('pathlib.Path.open')
+    def test_write_file_exception(self, mock_path_open):
+        """Test that _write_file raises IOError when file cannot be written."""
+        # Set up the mock to raise an IOError when opened
+        mock_path_open.side_effect = IOError("Permission denied")
+
+        # Create a test file path and content
+        test_file_path = Path("/test/path/file.txt")
+        test_content = "Test content"
+
+        # Verify that the method raises IOError with the expected message
+        with pytest.raises(IOError) as excinfo:
+            FileUpdater._write_file(test_file_path, test_content)
+
+        # Check that the error message contains the file path and original error
+        assert "Could not write to file" in str(excinfo.value)
+        assert str(test_file_path) in str(excinfo.value)
+        assert "Permission denied" in str(excinfo.value)
+
+        # Verify that the mock was called with the correct arguments
+        mock_path_open.assert_called_once_with("w", encoding="utf-8")
 
     @patch("update_version.FileUpdater._read_file")
     @patch("update_version.FileUpdater._write_file")
     def test_update_file_success(self, mock_write, mock_read, file_updater, tmp_path):
         """Test updating version in a file successfully."""
         test_file = tmp_path / "test_file.txt"
-        old_content = "version = '1.2.3'"
-        new_content = "version = '1.2.4'"
+        old_content = 'version = "1.2.3"'
+        new_content = 'version = "1.2.4"'
 
-        # Mock file exists
         with patch.object(Path, "exists", return_value=True):
-            # Mock read_file to return old content
             mock_read.return_value = old_content
 
             file_updater.update_file(test_file, "1.2.3", "1.2.4")
 
-            # Check that read_file was called
             mock_read.assert_called_once_with(test_file)
-            # Check that write_file was called with updated content
             mock_write.assert_called_once_with(test_file, new_content)
 
     @patch("update_version.FileUpdater._read_file")
@@ -66,14 +82,36 @@ class TestFileUpdater:
         test_file = tmp_path / "test_file.txt"
         content = "No version info here"
 
-        # Mock file exists
         with patch.object(Path, "exists", return_value=True):
-            # Mock read_file to return content without version
             mock_read.return_value = content
 
             file_updater.update_file(test_file, "1.2.3", "1.2.4")
 
-            # Check that read_file was called
             mock_read.assert_called_once_with(test_file)
-            # Check that write_file was not called since content didn't change
             mock_write.assert_not_called()
+
+    def test_update_file_nonexistent_file(self, file_updater):
+        """Test that update_file handles non-existing files correctly."""
+
+        # Create spy objects for the internal methods to verify they aren't called
+        with patch.object(file_updater, '_read_file') as mock_read_file, \
+                patch.object(file_updater, '_write_file') as mock_write_file, \
+                patch('update_version.logger') as mock_logger, \
+                patch('pathlib.Path.exists', return_value=False):
+
+            # Call the method with a test file path and versions
+            test_file_path = Path("/test/path/nonexistent_file.txt")
+            old_version = "1.0.0"
+            new_version = "1.1.0"
+
+            # Execute the method
+            file_updater.update_file(test_file_path, old_version, new_version)
+
+            # Verify that the method logs a warning
+            mock_logger.warning.assert_called_once_with(
+                f"File {test_file_path} does not exist, skipping"
+            )
+
+            # Verify that _read_file and _write_file are not called
+            mock_read_file.assert_not_called()
+            mock_write_file.assert_not_called()
