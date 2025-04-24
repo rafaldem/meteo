@@ -1,10 +1,18 @@
-from importlib.metadata import files
+import argparse
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 import pytest
-import argparse
-from unittest.mock import patch, MagicMock
-from update_version import VersionUpdaterCLI, Version, BumpType, Component, FileInfo
+
+from update_version import VersionUpdaterCLI, Version, FileInfo
+
+
+@pytest.fixture
+def cli(version_updater):
+    """Create a VersionUpdaterCLI instance for testing."""
+    cli_instance = VersionUpdaterCLI()
+    cli_instance.version_updater = version_updater
+    return cli_instance
 
 
 class TestVersionUpdaterCLI:
@@ -29,29 +37,26 @@ class TestVersionUpdaterCLI:
     @patch("update_version.VersionUpdaterCLI.parse_arguments")
     @patch("update_version.VersionManager.bump_version")
     @patch("update_version.VersionUpdater.update_version")
-    def test_run_success(self, mock_update, mock_bump, mock_parse_args, cli):
+    def test_run_success(self, mock_update, mock_bump, mock_parse_args, monkeypatch, version_updater, cli):
         """Test running the CLI with successful execution."""
-        # Patch the instance method directly
         expected_call_count = 3  # One call each for setup, frontend, and backend
-
-        cli.version_updater.get_current_version = MagicMock()
 
         mock_args = argparse.Namespace(
             component="both", bump_type="patch", action="increment", value=None, log_level="DEBUG"
         )
         mock_parse_args.return_value = mock_args
-
         current_version = Version(1, 2, 3)
         new_version = Version(1, 2, 4)
+        cli.version_updater.get_current_version = MagicMock()
         cli.version_updater.get_current_version.return_value = current_version
         mock_bump.return_value = new_version
 
         result = cli.run()
 
         assert result == 0, "CLI should return success code (0)"
-        # Expected call count is 3 (setup + frontend + backend)
-
-        assert cli.version_updater.get_current_version.call_count == expected_call_count, "Should retrieve version for each component"
+        assert (
+            cli.version_updater.get_current_version.call_count == expected_call_count
+        ), "Should retrieve version for each component"
         assert mock_bump.call_count == expected_call_count, "Should bump version for each component"
         assert mock_update.call_count == expected_call_count, "Should update version for each component"
 
@@ -68,18 +73,15 @@ class TestVersionUpdaterCLI:
 
         # Check that the CLI returned an error code
         assert result == 1
-
         assert mock_logger_error.call_count == 1
         assert mock_logger_error.call_args[0][0] == f"--value is required for 'set' action"
 
     @patch("update_version.logger.warning")
     @patch("update_version.VersionUpdaterCLI.parse_arguments")
-    def test_run_component_not_found_in_config(
-            self, mock_parse_args, mock_logger_warning, version_updater, cli
-    ):
+    def test_run_component_not_found_in_config(self, mock_parse_args, mock_logger_warning, version_updater, cli):
         """Test running with 'set' action but no value."""
-        with patch.object(cli, 'config', create=True) as mock_config:
-            mock_config.files = {'some_mocked_value': 'here'}
+        with patch.object(cli, "config", create=True) as mock_config:
+            mock_config.files = {"some_mocked_value": "here"}
 
             mock_args = argparse.Namespace(
                 component="backend", bump_type="minor", action="increment", value=None, log_level="DEBUG"

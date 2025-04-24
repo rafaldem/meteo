@@ -46,12 +46,6 @@ description = "Test project"
 
 
 @pytest.fixture
-def cli():
-    """Create a VersionUpdaterCLI instance for testing."""
-    return VersionUpdaterCLI()
-
-
-@pytest.fixture
 def version_updater():
     """Create a VersionUpdater instance for testing."""
     return VersionUpdater(VersionManager())
