@@ -1,9 +1,17 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from pathlib import Path
 import tempfile
 import shutil
 
-from update_version import VersionUpdater, VersionManager, VersionUpdaterCLI
+from update_version import (
+    VersionUpdaterCLI,
+    VersionConfig,
+    Version,
+    VersionManager,
+    VersionUpdater,
+)
 
 
 @pytest.fixture
@@ -71,3 +79,37 @@ def setup_files(temp_dir):
 
     return temp_dir
 
+
+# Fixture for creating a CLI instance with mocked dependencies
+@pytest.fixture
+def cli_fixture():
+    """
+    Create a VersionUpdaterCLI instance with mocked dependencies.
+
+    Returns:
+        tuple: (cli_instance, mock_config, mock_version_manager, mock_version_updater)
+    """
+    # Create mocks for dependencies
+    mock_config = MagicMock(spec=VersionConfig)
+    mock_version_manager = MagicMock(spec=VersionManager)
+    mock_version_updater = MagicMock(spec=VersionUpdater)
+
+    # Setup mock config with realistic defaults
+    mock_config.project_root = Path("/fake/project/root")
+    mock_config.files = [MagicMock()]
+
+    # Setup mock version manager
+    mock_version = Version(1, 2, 3)
+    mock_version_manager.parse_version.return_value = mock_version
+    mock_version_manager.format_version.return_value = "1.2.3"
+
+    # Setup mock version updater
+    mock_version_updater.get_current_version.return_value = mock_version
+
+    # Create CLI instance with mocks
+    with patch("update_version.VersionConfig", return_value=mock_config):
+        with patch("update_version.VersionManager", return_value=mock_version_manager):
+            with patch("update_version.VersionUpdater", return_value=mock_version_updater):
+                cli = VersionUpdaterCLI()
+
+    return cli, mock_config, mock_version_manager, mock_version_updater

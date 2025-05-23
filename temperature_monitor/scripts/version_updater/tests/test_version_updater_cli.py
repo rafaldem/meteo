@@ -1,103 +1,174 @@
-import argparse
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
+import os
 import pytest
+from unittest.mock import patch, MagicMock, mock_open
+from pathlib import Path
 
-from update_version import VersionUpdaterCLI, Version, FileInfo
-
-
-@pytest.fixture
-def cli(version_updater):
-    """Create a VersionUpdaterCLI instance for testing."""
-    cli_instance = VersionUpdaterCLI()
-    cli_instance.version_updater = version_updater
-    return cli_instance
-
+from update_version import (
+    VersionUpdaterCLI,
+    VersionConfig,
+    BumpType,
+    Component,
+    Version,
+    VersionManager,
+    VersionUpdater,
+)
 
 class TestVersionUpdaterCLI:
-    """Test cases for the VersionUpdaterCLI class."""
+    """
+    Test suite for the VersionUpdaterCLI class.
 
-    @patch("argparse.ArgumentParser.parse_args")
-    def test_parse_arguments_defaults(self, mock_parse_args):
-        """Test parsing arguments with defaults."""
-        mock_args = argparse.Namespace(
-            component="both", bump_type="patch", action="increment", value=None, log_level="info"
-        )
-        mock_parse_args.return_value = mock_args
+    Tests command-line argument parsing and execution behavior of the version
+    updater's command-line interface.
+    """
 
-        result = VersionUpdaterCLI.parse_arguments()
+    def test_parse_arguments_defaults(self, cli_fixture):
+        """
+        Test that default arguments are correctly handled when no CLI args are provided.
+        """
+        cli, _, _, _ = cli_fixture
 
-        assert result.component == "both"
-        assert result.bump_type == "patch"
-        assert result.action == "increment"
-        assert result.value is None
-        assert result.log_level == "info"
+        # Simulate empty command line arguments
+        with patch("sys.argv", ["update_version.py"]):
+            args = cli.parse_arguments()
 
-    @patch("update_version.VersionUpdaterCLI.parse_arguments")
-    @patch("update_version.VersionManager.bump_version")
-    @patch("update_version.VersionUpdater.update_version")
-    def test_run_success(self, mock_update, mock_bump, mock_parse_args, monkeypatch, version_updater, cli):
-        """Test running the CLI with successful execution."""
-        expected_call_count = 3  # One call each for setup, frontend, and backend
+        # Verify default values
+        assert args.component == "patch"
+        assert args.bump == "increment"
+        assert args.value is None
+        assert args.verbose is False
+        assert args.config_file == "version.yml"
 
-        mock_args = argparse.Namespace(
-            component="both", bump_type="patch", action="increment", value=None, log_level="DEBUG"
-        )
-        mock_parse_args.return_value = mock_args
-        current_version = Version(1, 2, 3)
-        new_version = Version(1, 2, 4)
-        cli.version_updater.get_current_version = MagicMock()
-        cli.version_updater.get_current_version.return_value = current_version
-        mock_bump.return_value = new_version
+    @pytest.mark.parametrize(
+        "component,bump_type,value,expected_version",
+        [
+            ("major", "increment", None, "2.0.0"),
+            ("minor", "increment", None, "1.3.0"),
+            ("patch", "increment", None, "1.2.4"),
+            ("major", "set", "5", "5.0.0"),
+            ("minor", "set", "8", "1.8.0"),
+            ("patch", "set", "9", "1.2.9"),
+        ],
+    )
+    def test_run_success(self, cli_fixture, component, bump_type, value, expected_version):
+        """
+        Test successful version updates with different parameter combinations.
 
-        result = cli.run()
+        Args:
+            component: The version component to modify (major, minor, or patch)
+            bump_type: The type of version change (increment or set)
+            value: The explicit value when using set bump type
+            expected_version: The expected resulting version
+        """
+        cli, _, mock_version_manager, mock_version_updater = cli_fixture
 
-        assert result == 0, "CLI should return success code (0)"
-        assert (
-            cli.version_updater.get_current_version.call_count == expected_call_count
-        ), "Should retrieve version for each component"
-        assert mock_bump.call_count == expected_call_count, "Should bump version for each component"
-        assert mock_update.call_count == expected_call_count, "Should update version for each component"
+        # Setup the original version
+        original_version = Version(1, 2, 3)
+        mock_version_updater.get_current_version.return_value = original_version
 
-    @patch("update_version.logger.error")
-    @patch("update_version.VersionUpdaterCLI.parse_arguments")
-    def test_run_set_without_value(self, mock_parse_args, mock_logger_error, cli):
-        """Test running with 'set' action but no value."""
-        mock_args = argparse.Namespace(
-            component="backend", bump_type="patch", action="set", value=None, log_level="DEBUG"
-        )
-        mock_parse_args.return_value = mock_args
+        # Setup the expected updated version
+        major, minor, patch_int = map(int, expected_version.split("."))
+        updated_version = Version(major, minor, patch_int)
+        mock_version_updater.update_version.return_value = updated_version
+        mock_version_manager.format_version.return_value = expected_version
 
-        result = cli.run()
+        # Prepare command line arguments
+        argv = ["update_version.py", "--component", component, "--bump", bump_type]
+        if value:
+            argv.extend(["--value", value])
 
-        # Check that the CLI returned an error code
-        assert result == 1
-        assert mock_logger_error.call_count == 1
-        assert mock_logger_error.call_args[0][0] == f"--value is required for 'set' action"
+        # Execute the command
+        with patch("sys.argv", argv):
+            with patch("builtins.print") as mock_print:
+                result = cli.run()
 
-    @patch("update_version.logger.warning")
-    @patch("update_version.VersionUpdaterCLI.parse_arguments")
-    def test_run_component_not_found_in_config(self, mock_parse_args, mock_logger_warning, version_updater, cli):
-        """Test running with 'set' action but no value."""
-        with patch.object(cli, "config", create=True) as mock_config:
-            mock_config.files = {"some_mocked_value": "here"}
+        # Verify results
+        assert result == 0
 
-            mock_args = argparse.Namespace(
-                component="backend", bump_type="minor", action="increment", value=None, log_level="DEBUG"
+        # Check that update_version was called with correct parameters
+        if bump_type == "increment":
+            mock_version_updater.update_version.assert_called_once_with(
+                getattr(Component, component.upper()), BumpType.INCREMENT, None
             )
-            mock_parse_args.return_value = mock_args
+        else:  # set
+            mock_version_updater.update_version.assert_called_once_with(
+                getattr(Component, component.upper()), BumpType.SET, int(value)
+            )
 
-            component = "backend"
+        # Verify the output message
+        mock_print.assert_any_call(f"Version updated to: {expected_version}")
 
-            file_info = MagicMock(spec=FileInfo)
-            file_info.path = MagicMock(spec=Path)
-            file_info.path.exists.return_value = False
+    def test_run_set_without_value(self, cli_fixture):
+        """
+        Test that an error is raised when using 'set' bump type without a value.
+        """
+        cli, _, _, _ = cli_fixture
 
-            result = cli.run()
+        # Prepare command line arguments with set but no value
+        with patch("sys.argv", ["update_version.py", "--bump", "set"]):
+            with patch("builtins.print") as mock_print:
+                result = cli.run()
 
-            # Check that the CLI returned an error code
-            assert result == 0
+        # Verify failure
+        assert result == 1
+        mock_print.assert_any_call("Error: When using 'set' bump type, a value must be provided.")
 
-            assert mock_logger_warning.call_count == 2
-            assert mock_logger_warning.call_args[0][0] == f"Component {component} not found in configuration"
+    def test_run_component_not_found_in_config(self, cli_fixture):
+        """
+        Test behavior when a requested version component doesn't exist in the config.
+        """
+        cli, _, _, mock_version_updater = cli_fixture
+
+        # Make update_version raise a KeyError
+        mock_version_updater.update_version.side_effect = KeyError("Component not found")
+
+        # Prepare command line arguments
+        with patch("sys.argv", ["update_version.py", "--component", "major"]):
+            with patch("builtins.print") as mock_print:
+                result = cli.run()
+
+        # Verify error handling
+        assert result == 1
+        mock_print.assert_any_call("Error: Component not found")
+
+    def test_run_with_verbose_flag(self, cli_fixture):
+        """
+        Test that verbose mode outputs additional information.
+        """
+        cli, mock_config, _, mock_version_updater = cli_fixture
+
+        # Setup the version
+        original_version = Version(1, 2, 3)
+        updated_version = Version(1, 2, 4)
+        mock_version_updater.get_current_version.return_value = original_version
+        mock_version_updater.update_version.return_value = updated_version
+
+        # Add files to config for verbose output
+        mock_config.files = [MagicMock(path=Path("version.py")), MagicMock(path=Path("setup.py"))]
+
+        # Prepare command line arguments with verbose flag
+        with patch("sys.argv", ["update_version.py", "--verbose"]):
+            with patch("builtins.print") as mock_print:
+                result = cli.run()
+
+        # Verify verbose output
+        assert result == 0
+        mock_print.assert_any_call("Current version: 1.2.3")
+        mock_print.assert_any_call("Updated files:")
+        for file_mock in mock_config.files:
+            mock_print.assert_any_call(f"  - {file_mock.path}")
+
+    def test_missing_config_file(self, cli_fixture):
+        """
+        Test behavior when the specified config file doesn't exist.
+        """
+        cli, _, _, _ = cli_fixture
+
+        # Make VersionConfig raise FileNotFoundError
+        with patch("update_version.VersionConfig", side_effect=FileNotFoundError("Config not found")):
+            with patch("sys.argv", ["update_version.py"]):
+                with patch("builtins.print") as mock_print:
+                    result = cli.run()
+
+        # Verify error handling
+        assert result == 1
+        mock_print.assert_any_call("Error: Config not found")
