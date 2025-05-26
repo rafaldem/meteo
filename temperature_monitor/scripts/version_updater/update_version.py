@@ -454,8 +454,13 @@ class VersionUpdaterCLI:
             component_list = ["setup"]
             if args.component == "both":
                 component_list += ["frontend", "backend"]
-            else:
+            elif args.component in ["frontend", "backend"]:
                 component_list += [args.component]
+            else:
+                logger.error(
+                    f"Invalid component: {args.component}! Should be one of: backend, frontend, both or setup."
+                )
+                return 1
 
             for component_name in component_list:
                 if component_name not in self.config.files:
