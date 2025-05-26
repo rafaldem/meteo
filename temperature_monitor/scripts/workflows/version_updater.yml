@@ -1,0 +1,294 @@
+name: Version Updater with Integration Tests and Cache Pipeline
+
+on:
+  push:
+    branches: [ develop, main ]
+  pull_request:
+    branches: [ develop, main ]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_changed: ${{ steps.filter.outputs.backend }}
+      frontend_changed: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'scripts/**'
+            frontend:
+              - 'frontend/**'
+              - 'scripts/**'
+
+  version-management-backend:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.backend_changed == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.set-version.outputs.new_version }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements*.txt', 'backend/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Determine version bump level
+        id: determine-level
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "bump_level=patch" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "bump_level=minor" >> $GITHUB_OUTPUT
+          else
+            echo "bump_level=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update backend version
+        id: set-version
+        run: |
+          NEW_VERSION=$(python scripts/update_version.py backend ${{ steps.determine-level.outputs.bump_level }})
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit backend version changes
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.email "${{ github.event.head_commit.author.email }}"
+          git config --global user.name "${{ github.event.head_commit.author.name }}"
+          git add backend/version.py backend/pyproject.toml
+          git commit -m "Bump backend version to ${{ steps.set-version.outputs.new_version }}"
+          git push
+
+  version-management-frontend:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.frontend_changed == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.set-version.outputs.new_version }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('scripts/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Determine version bump level
+        id: determine-level
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "bump_level=patch" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "bump_level=minor" >> $GITHUB_OUTPUT
+          else
+            echo "bump_level=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update frontend version
+        id: set-version
+        run: |
+          NEW_VERSION=$(python scripts/update_version.py frontend ${{ steps.determine-level.outputs.bump_level }})
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit frontend version changes
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.email "${{ github.event.head_commit.author.email }}"
+          git config --global user.name "${{ github.event.head_commit.author.name }}"
+          git add frontend/package.json
+          git commit -m "Bump frontend version to ${{ steps.set-version.outputs.new_version }}"
+          git push
+
+  build-and-test-backend:
+    needs: [detect-changes, version-management-backend]
+    if: ${{ needs.detect-changes.outputs.backend_changed == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      docker_image_tag: ${{ steps.docker-build.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements*.txt', 'backend/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -e .[dev,test]
+
+      - name: Run unit tests
+        run: |
+          cd backend
+          pytest tests/unit
+
+      - name: Run functional tests
+        run: |
+          cd backend
+          pytest tests/functional
+
+      - name: Build Backend Docker Image
+        id: docker-build
+        run: |
+          VERSION="${{ needs.version-management-backend.outputs.new_version || 'latest' }}"
+          DOCKER_TAG="backend:${VERSION}"
+          
+          docker build -t ${DOCKER_TAG} ./backend
+          echo "image_tag=${DOCKER_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Save Docker image to artifacts
+        run: |
+          mkdir -p docker-images
+          docker save ${{ steps.docker-build.outputs.image_tag }} -o docker-images/backend-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-docker-image
+          path: docker-images/backend-image.tar
+          retention-days: 1
+
+  build-and-test-frontend:
+    needs: [detect-changes, version-management-frontend]
+    if: ${{ needs.detect-changes.outputs.frontend_changed == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      docker_image_tag: ${{ steps.docker-build.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run unit tests
+        run: |
+          cd frontend
+          npm run test
+
+      - name: Run E2E tests
+        run: |
+          cd frontend
+          npm run test:e2e
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Build Frontend Docker Image
+        id: docker-build
+        run: |
+          VERSION="${{ needs.version-management-frontend.outputs.new_version || 'latest' }}"
+          DOCKER_TAG="frontend:${VERSION}"
+          
+          docker build -t ${DOCKER_TAG} ./frontend
+          echo "image_tag=${DOCKER_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Save Docker image to artifacts
+        run: |
+          mkdir -p docker-images
+          docker save ${{ steps.docker-build.outputs.image_tag }} -o docker-images/frontend-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-docker-image
+          path: docker-images/frontend-image.tar
+          retention-days: 1
+
+  end-to-end-integration-tests:
+    needs: [build-and-test-backend, build-and-test-frontend]
+    if: |
+      always() && 
+      (needs.build-and-test-backend.result == 'success' || needs.build-and-test-backend.result == 'skipped') && 
+      (needs.build-and-test-frontend.result == 'success' || needs.build-and-test-frontend.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Backend Docker image
+        if: needs.build-and-test-backend.result == 'success'
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-docker-image
+          path: docker-images
+
+      - name: Download Frontend Docker image
+        if: needs.build-and-test-frontend.result == 'success'
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-docker-image
+          path: docker-images
+
+      - name: Load Docker images
+        run: |
+          if [ -f docker-images/backend-image.tar ]; then
+            docker load -i docker-images/backend-image.tar
+          fi
+          if [ -f docker-images/frontend-image.tar ]; then
+            docker load -i docker-images/frontend-image.tar
+          fi
+
+      - name: Setup integration environment
+        run: |
+          docker-compose -f docker-compose.test.yml up -d
+
+      - name: Run end-to-end tests
+        run: |
+          npm run test:integration
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          docker-compose -f docker-compose.test.yml logs > integration-test-logs.txt
+
+      - name: Upload logs as artifact
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: integration-test-logs
+          path: integration-test-logs.txt

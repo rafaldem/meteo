@@ -179,4 +179,19 @@ cython_debug/
 /.idea/misc.xml
 /.idea/modules.xml
 /.idea/vcs.xml
+
+# NOTES
 /notes/
+
+# .gitignore additions for Docker
+.env.*
+!.env.example
+
+# Docker volumes
+docker-volumes/
+
+# Docker generated files
+.docker/
+
+# Test results
+test-results/

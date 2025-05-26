@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE:-backend:latest}
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/app_dev
+      - SECRET_KEY=local_development_secret_key
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ${FRONTEND_IMAGE:-frontend:latest}
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  db:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=app_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
