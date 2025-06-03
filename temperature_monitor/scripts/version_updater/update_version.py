@@ -64,6 +64,7 @@ class Component(Enum):
     MAJOR = "major"
     MINOR = "minor"
     PATCH = "patch"
+    OTHER = "other"
 
 
 @dataclass
@@ -247,7 +248,7 @@ class FileUpdater:
         try:
             with file_path.open("r", encoding="utf-8") as file:
                 return file.read()
-        except IOError as e:
+        except (IOError, UnicodeDecodeError) as e:
             logger.error(f"Error reading file {file_path}: {e}")
             raise IOError(f"Could not read file {file_path}: {e}")
 
@@ -397,9 +398,9 @@ class VersionUpdaterCLI:
 
         parser.add_argument(
             "--component",
-            choices=["backend", "frontend", "both"],
-            default="both",
-            help="Which component to update (default: both)",
+            choices=["backend", "frontend", "both", "other"],
+            default="other",
+            help="Which component to update (default: other)",
         )
 
         parser.add_argument(
@@ -456,6 +457,8 @@ class VersionUpdaterCLI:
                 component_list += ["frontend", "backend"]
             elif args.component in ["frontend", "backend"]:
                 component_list += [args.component]
+            elif args.component == "other":
+                pass
             else:
                 logger.error(
                     f"Invalid component: {args.component}! Should be one of: backend, frontend, both or setup."
