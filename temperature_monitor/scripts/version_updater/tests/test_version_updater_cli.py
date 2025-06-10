@@ -1,3 +1,4 @@
+import argparse
 import sys
 import pytest
 import logging
@@ -322,15 +323,16 @@ class TestVersionUpdaterCLIAdditional:
 
         # Create a mock for parse_arguments that returns args with missing value
         with patch.object(cli, "parse_arguments") as mock_parse:
-            args = MagicMock()
-            args.action = "set"
-            args.value = None  # Missing required value
-            args.log_level = "info"
+            args = argparse.Namespace(
+                component="other",
+                bump_type="patch",
+                action="set",
+                value=None,
+                log_level="info",
+            )
             mock_parse.return_value = args
-
-            # Call run method and verify it returns error code
             result = cli.run()
-            assert result == 1
+            assert result == "--value is required for 'set' action"
 
     def test_run_with_nonexistent_component_file(self):
         """
@@ -342,19 +344,22 @@ class TestVersionUpdaterCLIAdditional:
 
         # Mock parse_arguments to return valid args
         with patch.object(cli, "parse_arguments") as mock_parse:
-            args = MagicMock()
-            args.component = "backend"
-            args.action = "increment"
-            args.bump_type = "patch"
-            args.value = None
-            args.log_level = "info"
+            args = argparse.Namespace(
+                component="backend",
+                bump_type="patch",
+                action="increment",
+                value=None,
+                log_level="info",
+            )
             mock_parse.return_value = args
 
             # Mock Path.exists to return False for version file
             with patch("pathlib.Path.exists", return_value=False):
                 # Call run method and verify it returns error code
                 result = cli.run()
-                assert result == 1
+                assert result == (
+                    "Invalid component: backend! Should be one of: backend, frontend, both or setup."
+                )
 
 
 @pytest.fixture
@@ -424,8 +429,11 @@ class TestVersionUpdaterCLI:
             ("backend", "patch", "set", 5, 0),
             ("other", "minor", "increment", None, 0),
             # Invalid combinations
-            ("backend", "patch", "set", None, 1),  # Missing value for set action
-            ("invalid", "patch", "increment", None, 1),  # Invalid component
+            ("backend", "patch", "set", None, "--value is required for 'set' action"),  # Missing value for set action
+            (
+                "invalid", "patch", "increment", None,
+                "Invalid component: invalid! Should be one of: backend, frontend, both or setup."
+            ),  # Invalid component
         ],
     )
     def test_run_with_different_parameters(
@@ -499,11 +507,15 @@ class TestComponentValidationLogic:
             # Valid "other" component - should pass without error
             ("other", 0, False),
             # Invalid component names - should return 1 and log error
-            ("invalid_component", 1, True),
-            ("unknown", 1, True),
-            ("BACKEND", 1, True),  # Case sensitivity test
-            ("", 1, True),  # Empty string
-            ("setup", 1, True),  # "setup" is not a valid choice for --component
+            (
+                "invalid_component",
+                f"Invalid component: invalid_component! Should be one of: backend, frontend, both or setup.",
+                True
+            ),
+            ("unknown", "Invalid component: unknown! Should be one of: backend, frontend, both or setup.", True),
+            ("BACKEND", "Invalid component: BACKEND! Should be one of: backend, frontend, both or setup.", True),
+            ("", "Invalid component: ! Should be one of: backend, frontend, both or setup.", True),
+            ("setup", "Invalid component: setup! Should be one of: backend, frontend, both or setup.", True),
         ],
     )
     def test_component_validation_logic(
@@ -511,15 +523,6 @@ class TestComponentValidationLogic:
     ):
         """
         Test component validation logic for different component values.
-
-        This specifically tests the code path:
-        ```python
-        elif args.component == "other":
-            pass
-        else:
-            logger.error(f"Invalid component: {args.component}! Should be one of: backend, frontend, both or setup.")
-            return 1
-        ```
 
         Args:
             component: Component name to test
@@ -623,7 +626,9 @@ class TestComponentValidationLogic:
                 result = cli.run()
 
                 # Should return error code
-                assert result == 1
+                assert result == (
+                    f"Invalid component: {args.component}! Should be one of: backend, frontend, both or setup."
+                )
 
                 # Verify error was logged
                 mock_logger.error.assert_called_once()
@@ -662,7 +667,7 @@ class TestComponentValidationLogic:
                 result = cli.run()
 
                 # Should always return error code regardless of log level
-                assert result == 1
+                assert result == "Invalid component: invalid_test! Should be one of: backend, frontend, both or setup."
 
                 # Error should always be logged
                 mock_logger.error.assert_called_once()
@@ -874,13 +879,14 @@ class TestExceptionHandlingInComponentProcessing:
             with patch("update_version.logger") as mock_logger:
                 result = cli.run()
 
-                # Should return error code due to backend failure
-                assert result == 1
+                assert result == "Error updating backend version: Backend processing failed"
 
-                # Verify error was logged
                 error_calls = mock_logger.error.call_args_list
                 error_messages = [call[0][0] for call in error_calls]
-                assert any("Error updating backend version" in msg and "Backend processing failed" in msg for msg in error_messages)
+                assert any(
+                    "Error updating backend version" in msg and "Backend processing failed" in msg
+                    for msg in error_messages
+                )
 
     def test_multiple_exceptions_with_target_component_failure(self, cli_fixture):
         """
@@ -919,7 +925,7 @@ class TestExceptionHandlingInComponentProcessing:
                 result = cli.run()
 
                 # Should return error code due to frontend failure
-                assert result == 1
+                assert result == "Error updating frontend version: Processing failed"
 
                 # Verify error was logged for frontend
                 error_calls = mock_logger.error.call_args_list

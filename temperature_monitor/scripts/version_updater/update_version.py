@@ -432,7 +432,7 @@ class VersionUpdaterCLI:
 
         return parser.parse_args()
 
-    def run(self) -> int:
+    def run(self) -> int | str:
         """
         Run the version update process.
 
@@ -449,8 +449,9 @@ class VersionUpdaterCLI:
             component_enum = getattr(Component, args.bump_type.upper())
 
             if bump_type == BumpType.SET and args.value is None:
-                logger.error("--value is required for 'set' action")
-                return 1
+                error = "--value is required for 'set' action"
+                logger.error(error)
+                return error
 
             component_list = ["setup"]
             if args.component == "both":
@@ -460,10 +461,9 @@ class VersionUpdaterCLI:
             elif args.component == "other":
                 pass
             else:
-                logger.error(
-                    f"Invalid component: {args.component}! Should be one of: backend, frontend, both or setup."
-                )
-                return 1
+                error = f"Invalid component: {args.component}! Should be one of: backend, frontend, both or setup."
+                logger.error(error)
+                return error
 
             for component_name in component_list:
                 if component_name not in self.config.files:
@@ -476,7 +476,12 @@ class VersionUpdaterCLI:
                     if not component_file_info.path.exists():
                         logger.error(f"{component_name.capitalize()} version file {component_file_info} does not exist")
                         if args.component == component_name:
-                            return 1
+                            error = (
+                                f"Invalid component: {args.component}!"
+                                f" Should be one of: backend, frontend, both or setup."
+                            )
+                            logger.error(error)
+                            return error
                         continue
 
                     current_version = self.version_updater.get_current_version(component_file_info)
@@ -497,16 +502,18 @@ class VersionUpdaterCLI:
                     logger.info(f"Updated {component_name} version from {current_version} to {new_version}")
 
                 except Exception as e:
-                    logger.error(f"Error updating {component_name} version: {e}")
+                    error = f"Error updating {component_name} version: {e}"
+                    logger.error(error)
                     if args.component == component_name:
-                        return 1
+                        return error
 
             logger.info("Version update completed successfully")
             return 0
 
         except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            return 1
+            error = f"Unexpected error: {e}"
+            logger.error(error)
+            return error
 
 
 if __name__ == "__main__":
