@@ -71,7 +71,7 @@ jobs:
       - name: Update backend version
         id: set-version
         run: |
-          EXIT_CODE=$(python temperature_monitor/scripts/update_version.py --component backend --bump-type ${{ steps.determine-level.outputs.bump_level }})
+          EXIT_CODE=$(python temperature_monitor/scripts/version_updater/update_version.py --component backend --bump-type ${{ steps.determine-level.outputs.bump_level }})
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
 
       - name: Commit backend version changes
@@ -121,7 +121,7 @@ jobs:
       - name: Update frontend version
         id: set-version
         run: |
-          EXIT_CODE=$(python temperature_monitor/scripts/update_version.py --component frontend --bump-type ${{ steps.determine-level.outputs.bump_level }})
+          EXIT_CODE=$(python temperature_monitor/scripts/version_updater/update_version.py --component frontend --bump-type ${{ steps.determine-level.outputs.bump_level }})
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
 
       - name: Commit frontend version changes
@@ -171,7 +171,7 @@ jobs:
       - name: Update other components version
         id: set-version
         run: |
-          EXIT_CODE=$(python temperature_monitor/scripts/update_version.py --component other --bump-type ${{ steps.determine-level.outputs.bump_level }})
+          EXIT_CODE=$(python temperature_monitor/scripts/version_updater/update_version.py --component other --bump-type ${{ steps.determine-level.outputs.bump_level }})
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
 
       - name: Commit other version changes
