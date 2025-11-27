@@ -173,7 +173,7 @@ jobs:
         run: |
           EXIT_CODE=$(python temperature_monitor/scripts/version_updater/update_version.py --component other --bump-type ${{ steps.determine-level.outputs.bump_level }})
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
-
+          cat temperature_monitor/scripts/version_updater/version_updater.log
       - name: Commit other version changes
         if: github.event_name == 'push'
         run: |

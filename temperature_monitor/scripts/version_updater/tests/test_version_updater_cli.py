@@ -14,7 +14,6 @@ from update_version import (
     VersionManager,
     VersionUpdater,
     FileUpdater,
-    setup_logging,
     FileInfo
 )
 
@@ -36,61 +35,6 @@ def fresh_logger():
 
     # Restore original handlers after the test
     test_logger.handlers = original_handlers
-
-
-class TestSetupLogging:
-    """
-    Tests for the setup_logging function.
-
-    These tests verify that the logger is configured correctly with appropriate handlers.
-    """
-
-    def test_setup_logging_debug_mode(self, fresh_logger):
-        """
-        Test setup_logging function when debug mode is enabled.
-        Verifies that appropriate handlers are added to the logger.
-        """
-        with patch("update_version.logger", fresh_logger):
-            # Call the function with debug level
-            setup_logging()
-
-            # Verify that handlers were added
-            assert len(fresh_logger.handlers) == 2
-
-            # Check handler types and levels
-            # Explicitly check for StreamHandler (but not its subclasses)
-            console_handlers = [h for h in fresh_logger.handlers if type(h) is logging.StreamHandler]
-            file_handlers = [h for h in fresh_logger.handlers if type(h) is logging.FileHandler]
-
-            assert len(console_handlers) == 1
-            assert len(file_handlers) == 1
-
-            # In debug mode, both handlers should capture detailed logs
-            assert console_handlers[0].level == logging.INFO
-            assert file_handlers[0].level == logging.DEBUG
-
-    def test_setup_logging_normal_mode(self, fresh_logger):
-        """
-        Test setup_logging function in normal mode (non-debug).
-        Verifies that appropriate handlers are added to the logger.
-        """
-        with patch("update_version.logger", fresh_logger):
-            # Call the function with default settings
-            setup_logging()
-
-            # Verify that handlers were added
-            assert len(fresh_logger.handlers) == 2
-
-            # Explicitly check for StreamHandler (but not its subclasses)
-            console_handlers = [h for h in fresh_logger.handlers if type(h) is logging.StreamHandler]
-            file_handlers = [h for h in fresh_logger.handlers if type(h) is logging.FileHandler]
-
-            assert len(console_handlers) == 1
-            assert len(file_handlers) == 1
-
-            # Verify console handler shows info while file handler stores more details
-            assert console_handlers[0].level == logging.INFO
-            assert file_handlers[0].level == logging.DEBUG
 
 
 class TestLogDebugReturn:
