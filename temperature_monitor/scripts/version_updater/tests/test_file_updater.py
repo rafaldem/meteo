@@ -1,16 +1,31 @@
 import pytest
 from pathlib import Path
 from unittest.mock import mock_open, patch
-from update_version import FileUpdater, VersionManager
+from update_version import FileUpdater, VersionManager, StructuredLogger, LoggingConfig
 
 
 class TestFileUpdater:
     """Test cases for the FileUpdater class."""
 
     @pytest.fixture
-    def file_updater(self):
+    def logging_config(self):
+        """Create a LoggingConfig instance for testing."""
+        return LoggingConfig()
+
+    @pytest.fixture
+    def structured_logger(self, logging_config):
+        """Create a StructuredLogger instance for testing."""
+        return StructuredLogger(logging_config)
+
+    @pytest.fixture
+    def version_manager(self, structured_logger):
+        """Create a StructuredLogger instance for testing."""
+        return VersionManager(structured_logger)
+
+    @pytest.fixture
+    def file_updater(self, structured_logger, version_manager):
         """Create a FileUpdater instance for testing."""
-        return FileUpdater(VersionManager())
+        return FileUpdater(version_manager, structured_logger)
 
     def test_read_file_success(self, file_updater, tmp_path):
         """Test reading a file successfully."""
