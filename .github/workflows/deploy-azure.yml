@@ -1,0 +1,180 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, staging, prod]
+      image_tag:
+        description: 'Docker image tag (leave blank to auto-generate)'
+        required: false
+
+# ── Prevent concurrent deployments to the same environment ──
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+env:
+  APP_NAME:    temperature_monitor
+  LOCATION:    westeurope
+
+jobs:
+  # ─────────────────────────────────────────────────────────
+  # 1. Detect which services changed
+  # ─────────────────────────────────────────────────────────
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_changed:  ${{ steps.filter.outputs.backend }}
+      frontend_changed: ${{ steps.filter.outputs.frontend }}
+      infra_changed:    ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+            infra:
+              - 'infrastructure/**'
+
+  # ─────────────────────────────────────────────────────────
+  # 2. Build & push Docker images to ACR
+  # ─────────────────────────────────────────────────────────
+  build-and-push:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.sha }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Using image tag: $TAG"
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to ACR
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Build & push backend
+        if: needs.detect-changes.outputs.backend_changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context:   ./backend
+          file:      ./backend/Dockerfile
+          push:      true
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/backend:${{ steps.tag.outputs.tag }}
+            ${{ secrets.ACR_LOGIN_SERVER }}/backend:latest
+          cache-from: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/backend:buildcache
+          cache-to:   type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/backend:buildcache,mode=max
+
+      - name: Build & push frontend
+        if: needs.detect-changes.outputs.frontend_changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context:   ./frontend
+          file:      ./frontend/Dockerfile
+          push:      true
+          tags: |
+            ${{ secrets.ACR_LOGIN_SERVER }}/frontend:${{ steps.tag.outputs.tag }}
+            ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest
+          cache-from: type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/frontend:buildcache
+          cache-to:   type=registry,ref=${{ secrets.ACR_LOGIN_SERVER }}/frontend:buildcache,mode=max
+
+  # ─────────────────────────────────────────────────────────
+  # 3. Provision / update Azure infrastructure via Bicep
+  # ─────────────────────────────────────────────────────────
+  deploy-infrastructure:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    outputs:
+      backend_url:  ${{ steps.bicep.outputs.backendUrl }}
+      frontend_url: ${{ steps.bicep.outputs.frontendUrl }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create resource group (idempotent)
+        run: |
+          ENV="${{ github.event.inputs.environment || 'dev' }}"
+          RG="rg-${{ env.APP_NAME }}-${ENV}"
+          az group create \
+            --name "$RG" \
+            --location "${{ env.LOCATION }}" \
+            --tags application=${{ env.APP_NAME }} environment=${ENV} managedBy=bicep
+
+      - name: Deploy Bicep template
+        id: bicep
+        uses: azure/arm-deploy@v2
+        with:
+          subscriptionId:    ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resourceGroupName: rg-${{ env.APP_NAME }}-${{ github.event.inputs.environment || 'dev' }}
+          template:          ./infrastructure/main.bicep
+          parameters:        ./infrastructure/parameters.${{ github.event.inputs.environment || 'dev' }}.json postgresAdminPassword=${{ secrets.POSTGRES_ADMIN_PASSWORD }} imageTag=${{ needs.build-and-push.outputs.image_tag }}
+          deploymentName:    deploy-${{ github.sha }}
+          failOnStdErr:      false
+          scope: ''
+
+      - name: Print deployment URLs
+        run: |
+          echo "🚀 Backend:  ${{ steps.bicep.outputs.backendUrl }}"
+          echo "🌐 Frontend: ${{ steps.bicep.outputs.frontendUrl }}"
+
+  # ─────────────────────────────────────────────────────────
+  # 4. Smoke-test the deployment
+  # ─────────────────────────────────────────────────────────
+  smoke-test:
+    needs: deploy-infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for apps to be ready
+        run: sleep 30
+
+      - name: Health check – backend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ needs.deploy-infrastructure.outputs.backend_url }}/health")
+          echo "Backend health: $STATUS"
+          [ "$STATUS" = "200" ] || exit 1
+
+      - name: Health check – frontend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ needs.deploy-infrastructure.outputs.frontend_url }}")
+          echo "Frontend health: $STATUS"
+          [ "$STATUS" = "200" ] || exit 1
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Smoke tests failed – check Container Apps logs in Azure portal"

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "dev" },
+    "appName":         { "value": "temperature_monitor" },
+    "location":        { "value": "westeurope" },
+    "postgresAdminUser": { "value": "pgadmin" },
+    "postgresAdminPassword": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RG_NAME>/providers/Microsoft.KeyVault/vaults/<VAULT_NAME>"
+        },
+        "secretName": "postgres-admin-password"
+      }
+    },
+    "imageTag": { "value": "latest" }
+  }
+}
