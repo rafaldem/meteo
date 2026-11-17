@@ -2,13 +2,17 @@ import json
 
 import pytest
 
+from utils.seed_mock_data import MOCK_SENSORS
+
+MOCK_SENSOR_ID = MOCK_SENSORS[0]["id"]
+
 
 @pytest.mark.parametrize(
     "endpoint,method",
     [
         ("/auth/profile", "GET"),
         ("/api/sensors", "GET"),
-        ("/api/temperature/test-sensor-1?timeframe=daily", "GET"),
+        (f"/api/temperature/{MOCK_SENSOR_ID}?timeframe=daily", "GET"),
         ("/admin/settings", "GET"),
     ],
 )

@@ -52,6 +52,11 @@ def test_update_user(client, admin_headers, db_session):
     assert updated_user.theme == "dark"
     assert updated_user.role == UserRole.ADMIN
 
+    # The "user" account is shared by the whole session: restore its role so
+    # later tests that rely on it being a regular user are not affected.
+    updated_user.role = UserRole.USER
+    db_session.commit()
+
 
 def test_delete_user(client, admin_headers, db_session):
     """Test deleting a user as admin."""

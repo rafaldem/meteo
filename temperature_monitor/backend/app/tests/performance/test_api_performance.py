@@ -1,5 +1,6 @@
 import time
-from datetime import datetime
+
+import pytest
 
 
 def test_login_performance(client):
@@ -15,28 +16,16 @@ def test_login_performance(client):
     assert duration < 0.5  # Login should take less than 500ms
 
 
-def test_temperature_query_performance(client, admin_headers, db_session):
-    """Test temperature query performance with larger dataset."""
-    # First, add more data to the database
-    with client.application.app_context():
-        from models import TemperatureReading
+@pytest.mark.parametrize("timeframe", ["daily", "weekly", "monthly", "yearly"])
+def test_temperature_query_performance(client, admin_headers, mock_sensor_id, timeframe):
+    """Test temperature query performance against the mocked data set.
 
-        # Add 1000 temperature readings
-        base_date = datetime.now()
-        readings = []
-        for i in range(1000):
-            reading = TemperatureReading(
-                sensor_id="perf-test-sensor", temperature=20.0 + (i % 10), humidity=50.0 + (i % 20), timestamp=base_date
-            )
-            readings.append(reading)
-
-        db_session.bulk_save_objects(readings)
-        db_session.commit()
-
-    # Now test query performance
+    The mock data script seeds ~400 days of history per sensor (over 11k
+    readings), which is a realistic dataset size for the aggregate queries.
+    """
     start_time = time.time()
 
-    response = client.get("/api/temperature/perf-test-sensor?timeframe=daily", headers=admin_headers)
+    response = client.get(f"/api/temperature/{mock_sensor_id}?timeframe={timeframe}", headers=admin_headers)
 
     end_time = time.time()
     duration = end_time - start_time

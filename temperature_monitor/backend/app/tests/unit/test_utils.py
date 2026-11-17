@@ -5,7 +5,7 @@ import pytest
 from flask import Flask, Response
 from flask_jwt_extended import JWTManager
 
-from app.models import UserRole
+from models import UserRole
 from utils.decorators import admin_required
 
 
@@ -29,9 +29,9 @@ def test_admin_required_decorator(jwt_authenticated_app):
     """Test the admin_required decorator."""
     with jwt_authenticated_app.app_context():
         # Mock the get_jwt_identity function
-        with patch("app.utils.decorators.get_jwt_identity", return_value=1):
+        with patch("utils.decorators.get_jwt_identity", return_value=1):
             # Mock the User.query
-            with patch("app.utils.decorators.User") as MockUser:
+            with patch("utils.decorators.User") as MockUser:
                 # Set up the mock user
                 mock_user = MagicMock()
                 MockUser.query.get.return_value = mock_user

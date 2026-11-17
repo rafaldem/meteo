@@ -38,7 +38,7 @@ def add_temperature():
 @bp.route("/temperature/<sensor_id>", methods=["GET"])
 @jwt_required()
 def get_temperature(sensor_id):
-    timeframe_params = ["hourly", "daily", "weekly", "monthly"]
+    timeframe_params = ["daily", "weekly", "monthly", "yearly"]
     timeframe = request.args.get("timeframe", "daily")
     date_str = request.args.get("date")
     if timeframe not in timeframe_params:
@@ -60,14 +60,12 @@ def get_temperature(sensor_id):
         start_date = base_date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = start_date + timedelta(days=1)
         group_by = func.strftime("%H", TemperatureReading.timestamp)
-        format_str = "%H:00"
     elif timeframe == "weekly":
         # Start from Monday of the week containing base_date
         start_date = base_date - timedelta(days=base_date.weekday())
         start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = start_date + timedelta(days=7)
         group_by = func.strftime("%w", TemperatureReading.timestamp)
-        format_str = "%A"
     elif timeframe == "monthly":
         start_date = base_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         if start_date.month == 12:
@@ -75,12 +73,10 @@ def get_temperature(sensor_id):
         else:
             end_date = start_date.replace(month=start_date.month + 1)
         group_by = func.strftime("%d", TemperatureReading.timestamp)
-        format_str = "Day %d"
     elif timeframe == "yearly":
         start_date = base_date.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         end_date = start_date.replace(year=start_date.year + 1)
         group_by = func.strftime("%m", TemperatureReading.timestamp)
-        format_str = "%B"
     else:
         return jsonify({"error": "Invalid timeframe. Use daily, weekly, monthly, or yearly"}), 400
 
@@ -99,7 +95,6 @@ def get_temperature(sensor_id):
             TemperatureReading.timestamp < end_date,
         )
         .group_by("time_group")
-        .format(format_str)
         .all()
     )
 
@@ -112,10 +107,10 @@ def get_temperature(sensor_id):
         "data": [
             {
                 "time_group": r.time_group,
-                "avg_temperature": round(r.avg_temperature, 2) if r.avg_temperature else None,
-                "min_temperature": round(r.min_temperature, 2) if r.min_temperature else None,
-                "max_temperature": round(r.max_temperature, 2) if r.max_temperature else None,
-                "avg_humidity": round(r.avg_humidity, 2) if r.avg_humidity else None,
+                "avg_temperature": round(r.avg_temperature, 2) if r.avg_temperature is not None else None,
+                "min_temperature": round(r.min_temperature, 2) if r.min_temperature is not None else None,
+                "max_temperature": round(r.max_temperature, 2) if r.max_temperature is not None else None,
+                "avg_humidity": round(r.avg_humidity, 2) if r.avg_humidity is not None else None,
             }
             for r in readings
         ],
