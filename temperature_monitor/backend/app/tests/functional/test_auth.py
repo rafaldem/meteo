@@ -5,6 +5,7 @@ from models import User, UserRole
 
 def test_register(client, db_session):
     """Test user registration."""
+
     response = client.post(
         "/auth/register", json={"username": "newuser", "email": "newuser@example.com", "password": "password123"}
     )
@@ -14,7 +15,6 @@ def test_register(client, db_session):
     assert "message" in data
     assert data["message"] == "User registered successfully"
 
-    # Verify user was created in the database
     user = User.query.filter_by(username="newuser").first()
     assert user is not None
     assert user.email == "newuser@example.com"
@@ -23,6 +23,7 @@ def test_register(client, db_session):
 
 def test_register_duplicate_username(client):
     """Test registration with duplicate username."""
+
     response = client.post(
         "/auth/register",
         json={"username": "admin", "email": "different@example.com", "password": "password123"},  # Already exists
@@ -36,6 +37,7 @@ def test_register_duplicate_username(client):
 
 def test_login_success(client):
     """Test successful login."""
+
     response = client.post("/auth/login", json={"username": "admin", "password": "admin_password"})
 
     assert response.status_code == 200
@@ -49,6 +51,7 @@ def test_login_success(client):
 
 def test_login_invalid_credentials(client):
     """Test login with invalid credentials."""
+
     response = client.post("/auth/login", json={"username": "admin", "password": "wrong_password"})
 
     assert response.status_code == 401
@@ -59,6 +62,7 @@ def test_login_invalid_credentials(client):
 
 def test_profile_get(client, admin_headers):
     """Test getting user profile."""
+
     response = client.get("/auth/profile", headers=admin_headers)
 
     assert response.status_code == 200
@@ -70,6 +74,7 @@ def test_profile_get(client, admin_headers):
 
 def test_profile_update(client, admin_headers, db_session):
     """Test updating user profile."""
+
     response = client.put(
         "/auth/profile", headers=admin_headers, json={"email": "updated@example.com", "theme": "dark"}
     )
@@ -79,7 +84,6 @@ def test_profile_update(client, admin_headers, db_session):
     assert data["email"] == "updated@example.com"
     assert data["theme"] == "dark"
 
-    # Verify changes in database
     user = User.query.filter_by(username="admin").first()
     assert user.email == "updated@example.com"
     assert user.theme == "dark"

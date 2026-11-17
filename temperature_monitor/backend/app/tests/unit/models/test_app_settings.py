@@ -3,6 +3,7 @@ from models import AppSettings
 
 def test_app_settings_creation(db_session):
     """Test creating an app setting."""
+
     setting = AppSettings(key="test_setting", value="test_value", description="A test setting", requires_admin=True)
     db_session.add(setting)
     db_session.commit()
@@ -16,6 +17,7 @@ def test_app_settings_creation(db_session):
 
 def test_to_dict_structure(sample_app_settings):
     """Test that to_dict returns a dictionary with correct keys."""
+
     result = sample_app_settings.to_dict()
     assert isinstance(result, dict)
     expected_keys = {"id", "key", "value", "description", "requires_admin"}
@@ -24,6 +26,7 @@ def test_to_dict_structure(sample_app_settings):
 
 def test_to_dict_values(sample_app_settings):
     """Test that to_dict returns correct values."""
+
     result = sample_app_settings.to_dict()
     assert result["id"] == sample_app_settings.id
     assert result["key"] == sample_app_settings.key
@@ -34,6 +37,7 @@ def test_to_dict_values(sample_app_settings):
 
 def test_to_dict_default_values():
     """Test that to_dict handles default values correctly."""
+
     app_settings = AppSettings(id=2, key="default_key", value=None, description=None)
     result = app_settings.to_dict()
     assert result["id"] == 2

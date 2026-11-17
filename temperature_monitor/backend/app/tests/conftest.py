@@ -1,8 +1,7 @@
-from datetime import timedelta
-
 import pytest
-from flask_jwt_extended import create_access_token
 
+from flask_jwt_extended import create_access_token
+from datetime import timedelta
 from app import create_app, db, bcrypt
 from models import User, UserRole, AppSettings
 from utils.seed_mock_data import MOCK_SENSORS, seed_mock_data
@@ -22,6 +21,7 @@ class TestConfig:
 @pytest.fixture(scope="session")
 def sample_app_settings():
     """Sample app settings for testing"""
+
     return {
         "TITLE": "Test title",
         "DESCRIPTION": "Test description",
@@ -41,11 +41,11 @@ def app(sample_app_settings, tmp_path_factory):
     SQLite is served through a single shared connection, which breaks the
     concurrent-request tests once the DB holds the (large) mocked data set.
     """
+
     db_file = tmp_path_factory.mktemp("db") / "test.db"
     TestConfig.SQLALCHEMY_DATABASE_URI = f"sqlite:///{db_file}"
     app = create_app(TestConfig, sample_app_settings)
 
-    # Establish an application context before running the tests
     with app.app_context():
         db.create_all()
         _init_test_data()
@@ -56,7 +56,7 @@ def app(sample_app_settings, tmp_path_factory):
 
 def _init_test_data():
     """Initialize test data."""
-    # Create test users
+
     admin_user = User(
         username="admin",
         email="admin@example.com",
@@ -82,7 +82,6 @@ def _init_test_data():
     # last 14 days are fine-grained and the rest of the ~400 days is hourly.
     seed_mock_data(seed=MOCK_DATA_SEED)
 
-    # Create some app settings
     settings = [
         AppSettings(key="SITE_TITLE", value="Temperature Monitor", description="Site title", requires_admin=True),
         AppSettings(key="ALERT_THRESHOLD", value="30", description="Temperature alert threshold", requires_admin=True),
@@ -101,6 +100,7 @@ def _init_test_data():
 @pytest.fixture(autouse=True)
 def _clean_session(app):
     """Roll back after every test so a failed flush cannot break later tests."""
+
     yield
     db.session.rollback()
 
@@ -108,30 +108,35 @@ def _clean_session(app):
 @pytest.fixture(scope="session")
 def mock_sensors():
     """Definitions of the sensors created by the mock data script."""
+
     return MOCK_SENSORS
 
 
 @pytest.fixture(scope="session")
 def mock_sensor_ids(mock_sensors):
     """IDs of the sensors that have mocked readings in the test database."""
+
     return [sensor["id"] for sensor in mock_sensors]
 
 
 @pytest.fixture(scope="session")
 def mock_sensor_id(mock_sensor_ids):
     """ID of the main mocked sensor (outdoor, full seasonal range)."""
+
     return mock_sensor_ids[0]
 
 
 @pytest.fixture(scope="session")
 def client(app):
     """A test client for the app."""
+
     return app.test_client()
 
 
 @pytest.fixture(scope="session")
 def db_session(app):
     """The app's SQLAlchemy session (app context is held open by the `app` fixture)."""
+
     yield db.session
     db.session.rollback()
 
@@ -139,9 +144,10 @@ def db_session(app):
 @pytest.fixture(scope="session")
 def admin_token(app):
     """JWT token for the seeded admin user."""
+
     user = User.query.filter_by(username="admin").first()
     return create_access_token(
-        identity=str(user.id),  # JWT subject must be a string
+        identity=str(user.id),
         expires_delta=timedelta(hours=1),
         additional_claims={"is_admin": True},
     )
@@ -150,6 +156,7 @@ def admin_token(app):
 @pytest.fixture(scope="session")
 def user_token(app):
     """JWT token for regular user."""
+
     with app.app_context():
         user = User.query.filter_by(username="user").first()
         expires = timedelta(hours=1)
@@ -162,6 +169,7 @@ def user_token(app):
 @pytest.fixture(scope="session")
 def admin_headers(admin_token):
     """Headers with admin JWT token."""
+
     return {
         "Authorization": f"Bearer {admin_token}",
         "Content-Type": "application/json",
@@ -171,6 +179,7 @@ def admin_headers(admin_token):
 @pytest.fixture(scope="session")
 def user_headers(user_token):
     """Headers with user JWT token."""
+
     return {
         "Authorization": f"Bearer {user_token}",
         "Content-Type": "application/json",

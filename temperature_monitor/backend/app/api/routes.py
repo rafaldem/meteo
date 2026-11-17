@@ -43,7 +43,7 @@ def get_temperature(sensor_id):
     date_str = request.args.get("date")
     if timeframe not in timeframe_params:
         return (
-            jsonify({"error": f"Invalid timeframe parameter." f' Shuould be one of: {", ".join(timeframe_params)}.'}),
+            jsonify({"error": f"Invalid timeframe parameter." f' Should be one of: {", ".join(timeframe_params)}.'}),
             422,
         )
 
@@ -55,13 +55,11 @@ def get_temperature(sensor_id):
     else:
         base_date = datetime.now()
 
-    # Determine time range based on timeframe
     if timeframe == "daily":
         start_date = base_date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = start_date + timedelta(days=1)
         group_by = func.strftime("%H", TemperatureReading.timestamp)
     elif timeframe == "weekly":
-        # Start from Monday of the week containing base_date
         start_date = base_date - timedelta(days=base_date.weekday())
         start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_date = start_date + timedelta(days=7)
@@ -80,7 +78,6 @@ def get_temperature(sensor_id):
     else:
         return jsonify({"error": "Invalid timeframe. Use daily, weekly, monthly, or yearly"}), 400
 
-    # Query database for temperature readings
     readings = (
         db.session.query(
             group_by.label("time_group"),
@@ -99,6 +96,7 @@ def get_temperature(sensor_id):
     )
 
     # Format response
+    round_value = lambda x: round(x, 2) if x is not None else None
     result = {
         "sensor_id": sensor_id,
         "timeframe": timeframe,
@@ -107,10 +105,10 @@ def get_temperature(sensor_id):
         "data": [
             {
                 "time_group": r.time_group,
-                "avg_temperature": round(r.avg_temperature, 2) if r.avg_temperature is not None else None,
-                "min_temperature": round(r.min_temperature, 2) if r.min_temperature is not None else None,
-                "max_temperature": round(r.max_temperature, 2) if r.max_temperature is not None else None,
-                "avg_humidity": round(r.avg_humidity, 2) if r.avg_humidity is not None else None,
+                "avg_temperature": round_value(r.avg_temperature),
+                "min_temperature": round_value(r.min_temperature),
+                "max_temperature": round_value(r.max_temperature),
+                "avg_humidity": round_value(r.avg_humidity),
             }
             for r in readings
         ],
@@ -122,7 +120,6 @@ def get_temperature(sensor_id):
 @bp.route("/sensors", methods=["GET"])
 @jwt_required()
 def get_sensors():
-    # Get distinct sensor IDs from the database
     sensors = db.session.query(TemperatureReading.sensor_id).distinct().all()
     sensor_ids = [s.sensor_id for s in sensors]
 

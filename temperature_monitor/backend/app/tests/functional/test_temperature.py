@@ -1,14 +1,14 @@
+import pytest
 import calendar
 import json
 from datetime import datetime, timedelta
-
-import pytest
 
 from models import TemperatureReading
 
 
 def test_add_temperature(client, admin_headers, db_session):
     """Test adding a temperature reading."""
+
     response = client.post(
         "/api/temperature",
         headers=admin_headers,
@@ -21,7 +21,6 @@ def test_add_temperature(client, admin_headers, db_session):
     assert data["temperature"] == 22.5
     assert data["humidity"] == 55.0
 
-    # Verify in database
     reading = TemperatureReading.query.filter_by(sensor_id="new-sensor").first()
     assert reading is not None
     assert reading.temperature == 22.5
@@ -30,13 +29,13 @@ def test_add_temperature(client, admin_headers, db_session):
 
 def test_add_temperature_unauthorized(client, user_headers):
     """Test adding a temperature reading with insufficient permissions."""
+
     response = client.post(
         "/api/temperature",
         headers=user_headers,
         json={"sensor_id": "new-sensor", "temperature": 22.5, "humidity": 55.0},
     )
 
-    # Should fail because only admins can add temperatures
     assert response.status_code == 403
     data = json.loads(response.data)
     assert "error" in data
@@ -54,6 +53,7 @@ def _get(client, headers, sensor_id, timeframe, day=None):
 
 def _assert_consistent(entries):
     """Aggregates returned for mocked readings must be internally consistent."""
+
     for entry in entries:
         assert entry["min_temperature"] <= entry["avg_temperature"] <= entry["max_temperature"]
         assert -40 <= entry["min_temperature"] and entry["max_temperature"] <= 50
@@ -62,6 +62,7 @@ def _assert_consistent(entries):
 
 def test_get_temperature_daily(client, user_headers, mock_sensor_id):
     """Daily view of a fully seeded day returns one aggregate per hour."""
+
     yesterday = datetime.now() - timedelta(days=1)
     data = _get(client, user_headers, mock_sensor_id, "daily", yesterday)
 
@@ -77,6 +78,7 @@ def test_get_temperature_daily(client, user_headers, mock_sensor_id):
 
 def test_get_temperature_daily_defaults_to_today(client, user_headers, mock_sensor_id):
     """Without a date the API returns today's (possibly partial) mocked data."""
+
     data = _get(client, user_headers, mock_sensor_id, "daily")
 
     assert data["start_date"].startswith(f"{datetime.now():%Y-%m-%d}")
@@ -86,6 +88,7 @@ def test_get_temperature_daily_defaults_to_today(client, user_headers, mock_sens
 
 def test_get_temperature_weekly(client, user_headers, mock_sensor_id):
     """Weekly view of a fully seeded week returns one aggregate per weekday."""
+
     data = _get(client, user_headers, mock_sensor_id, "weekly", datetime.now() - timedelta(days=7))
 
     assert data["timeframe"] == "weekly"
@@ -95,7 +98,7 @@ def test_get_temperature_weekly(client, user_headers, mock_sensor_id):
 
 def test_get_temperature_monthly(client, user_headers, mock_sensor_id):
     """Monthly view of a fully seeded month returns one aggregate per day."""
-    # Previous month is always inside the ~400 days of mocked history.
+
     last_month = datetime.now().replace(day=1) - timedelta(days=1)
     data = _get(client, user_headers, mock_sensor_id, "monthly", last_month)
 
@@ -106,9 +109,10 @@ def test_get_temperature_monthly(client, user_headers, mock_sensor_id):
 
 def test_get_temperature_yearly(client, user_headers, mock_sensor_id):
     """Yearly view of a fully seeded year returns one aggregate per month."""
+
+    data = _get(client, user_headers, mock_sensor_id, "yearly", datetime.now() - timedelta(days=365))
     # ~400 days of history always fully cover the previous calendar year's
     # months from the oldest seeded month up to December.
-    data = _get(client, user_headers, mock_sensor_id, "yearly", datetime.now() - timedelta(days=365))
 
     assert data["timeframe"] == "yearly"
     assert 1 <= len(data["data"]) <= 12
@@ -117,6 +121,7 @@ def test_get_temperature_yearly(client, user_headers, mock_sensor_id):
 
 def test_get_temperature_outside_mock_history_is_empty(client, user_headers, mock_sensor_id):
     """Dates older than the mocked history have no readings."""
+
     data = _get(client, user_headers, mock_sensor_id, "daily", datetime.now() - timedelta(days=800))
 
     assert data["data"] == []
@@ -125,6 +130,7 @@ def test_get_temperature_outside_mock_history_is_empty(client, user_headers, moc
 @pytest.mark.parametrize("sensor_index", [0, 1, 2])
 def test_get_temperature_for_each_mock_sensor(client, user_headers, mock_sensor_ids, sensor_index):
     """Every sensor created by the mock data script serves data."""
+
     sensor_id = mock_sensor_ids[sensor_index]
     data = _get(client, user_headers, sensor_id, "daily", datetime.now() - timedelta(days=1))
 
@@ -134,6 +140,7 @@ def test_get_temperature_for_each_mock_sensor(client, user_headers, mock_sensor_
 
 def test_get_temperature_unknown_sensor_is_empty(client, user_headers):
     """A sensor without readings yields an empty data set rather than an error."""
+
     data = _get(client, user_headers, "does-not-exist", "daily", datetime.now() - timedelta(days=1))
 
     assert data["data"] == []
@@ -141,6 +148,7 @@ def test_get_temperature_unknown_sensor_is_empty(client, user_headers):
 
 def test_mock_readings_have_fine_resolution_for_recent_days(app, mock_sensor_id):
     """The last 14 days are seeded every 10 minutes, i.e. 144 readings per day."""
+
     day_start = (datetime.now() - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     count = TemperatureReading.query.filter(
         TemperatureReading.sensor_id == mock_sensor_id,
@@ -153,6 +161,7 @@ def test_mock_readings_have_fine_resolution_for_recent_days(app, mock_sensor_id)
 
 def test_get_sensors(client, user_headers, mock_sensor_ids):
     """The sensors endpoint lists every sensor with mocked readings."""
+
     response = client.get("/api/sensors", headers=user_headers)
 
     assert response.status_code == 200
@@ -163,7 +172,8 @@ def test_get_sensors(client, user_headers, mock_sensor_ids):
 
 
 def test_zero_degree_readings_are_not_reported_as_missing(client, admin_headers, db_session):
-    """0 C is a valid reading and must not be turned into null."""
+    """0 degree Celsius is a valid reading and must not be turned into null."""
+
     day = datetime.now() - timedelta(days=3)
     db_session.add(TemperatureReading(sensor_id="zero-sensor", temperature=0.0, humidity=0.0, timestamp=day))
     db_session.commit()

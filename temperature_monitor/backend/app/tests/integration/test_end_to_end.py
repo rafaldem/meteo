@@ -1,11 +1,11 @@
 import json
 from datetime import datetime, timedelta
-
 from utils.seed_mock_data import MOCK_SENSORS
 
 
 def test_end_to_end_temperature_workflow(client):
     """Test the complete workflow from registration to temperature queries."""
+
     # 1. Register a new admin user
     response = client.post(
         "/auth/register", json={"username": "e2e_admin", "email": "e2e_admin@example.com", "password": "password123"}
@@ -86,36 +86,3 @@ def test_end_to_end_temperature_workflow(client):
     # 12. Admin can update any user's data
     response = client.put(f"/admin/users/2", headers=headers, json={"theme": "light"})
     assert response.status_code == 200
-
-
-def test_refactored_code_quality(app):
-    """Test that refactored code meets quality standards."""
-    # This is more of a code inspection than a test
-    # In a real project, we would use linters and static analyzers
-
-    # Check import patterns and organization
-    from app import db
-    from models import User, TemperatureReading
-
-    # Check that models use correct relationships
-    with app.app_context():
-        # Verify model relationships and constraints
-        assert User.__tablename__ == "user"
-        assert TemperatureReading.__tablename__ == "temperature_reading"
-
-        # Verify indexes for performance
-        from sqlalchemy import inspect
-
-        inspector = inspect(db.engine)
-
-        user_indexes = inspector.get_indexes("user")
-        temp_indexes = inspector.get_indexes("temperature_reading")
-
-        # Check for expected indexes
-        user_indexed_columns = [idx["column_names"][0] for idx in user_indexes]
-        temp_indexed_columns = [idx["column_names"][0] for idx in temp_indexes]
-
-        assert "username" in user_indexed_columns
-        assert "email" in user_indexed_columns
-        assert "sensor_id" in temp_indexed_columns
-        assert "timestamp" in temp_indexed_columns

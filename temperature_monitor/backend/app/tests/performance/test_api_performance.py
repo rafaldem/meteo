@@ -1,10 +1,11 @@
 import time
-
 import pytest
+import threading
 
 
 def test_login_performance(client):
     """Test login endpoint performance."""
+
     start_time = time.time()
 
     response = client.post("/auth/login", json={"username": "admin", "password": "admin_password"})
@@ -13,7 +14,7 @@ def test_login_performance(client):
     duration = end_time - start_time
 
     assert response.status_code == 200
-    assert duration < 0.5  # Login should take less than 500ms
+    assert duration < 0.5
 
 
 @pytest.mark.parametrize("timeframe", ["daily", "weekly", "monthly", "yearly"])
@@ -23,6 +24,7 @@ def test_temperature_query_performance(client, admin_headers, mock_sensor_id, ti
     The mock data script seeds ~400 days of history per sensor (over 11k
     readings), which is a realistic dataset size for the aggregate queries.
     """
+
     start_time = time.time()
 
     response = client.get(f"/api/temperature/{mock_sensor_id}?timeframe={timeframe}", headers=admin_headers)
@@ -36,14 +38,11 @@ def test_temperature_query_performance(client, admin_headers, mock_sensor_id, ti
 
 def test_concurrent_requests(client, admin_headers):
     """Test handling multiple concurrent requests."""
-    import threading
 
-    # Define a function to make requests
     def make_request(thread_results, index):
         response = client.get("/api/sensors", headers=admin_headers)
         thread_results[index] = response.status_code
 
-    # Make 10 concurrent requests
     results = [0] * 10
     threads = []
 
@@ -60,16 +59,13 @@ def test_concurrent_requests(client, admin_headers):
     end_time = time.time()
     duration = end_time - start_time
 
-    # All requests should succeed
     assert all(code == 200 for code in results)
-
-    # Should handle all requests quickly
     assert duration < 2.0  # All requests should complete in less than 2 seconds
 
 
 def test_database_performance(client, admin_headers, db_session):
     """Test database write performance."""
-    # Time how long it takes to add 100 temperature readings
+
     readings = []
     for i in range(100):
         readings.append(
@@ -85,5 +81,4 @@ def test_database_performance(client, admin_headers, db_session):
     end_time = time.time()
     duration = end_time - start_time
 
-    # Adding 100 readings should be reasonably fast
     assert duration < 10.0  # Should take less than 10 seconds total (100ms per request)

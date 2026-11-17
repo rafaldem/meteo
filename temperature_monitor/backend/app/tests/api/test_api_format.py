@@ -1,8 +1,8 @@
 import json
-
 import pytest
 
 from utils.seed_mock_data import MOCK_SENSORS
+
 
 MOCK_SENSOR_ID = MOCK_SENSORS[0]["id"]
 
@@ -18,6 +18,7 @@ MOCK_SENSOR_ID = MOCK_SENSORS[0]["id"]
 )
 def test_individual_endpoints(client, admin_headers, endpoint, method):
     """Test that each API endpoint returns a successful response."""
+
     if method == "GET":
         response = client.get(endpoint, headers=admin_headers)
 
@@ -43,16 +44,14 @@ def test_individual_endpoints(client, admin_headers, endpoint, method):
 
 def test_api_error_format(client, admin_headers):
     """Test that API error responses follow a consistent format."""
-    # Test with non-existent endpoint
+
     response = client.get("/api/nonexistent", headers=admin_headers)
     assert response.status_code in [404, 405]
 
-    # Test with missing required field
     response = client.post(
         "/auth/register",
         json={
             "username": "incomplete",
-            # Missing email and password
         },
     )
 

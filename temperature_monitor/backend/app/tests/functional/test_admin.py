@@ -5,6 +5,7 @@ from models import User, UserRole, AppSettings
 
 def test_get_users_admin(client, admin_headers):
     """Test getting all users as admin."""
+
     response = client.get("/admin/users", headers=admin_headers)
 
     assert response.status_code == 200
@@ -20,6 +21,7 @@ def test_get_users_admin(client, admin_headers):
 
 def test_get_users_unauthorized(client, user_headers):
     """Test getting all users as regular user."""
+
     response = client.get("/admin/users", headers=user_headers)
 
     # Should fail because regular users can't access admin endpoints
@@ -31,7 +33,7 @@ def test_get_users_unauthorized(client, user_headers):
 
 def test_update_user(client, admin_headers, db_session):
     """Test updating a user as admin."""
-    # Get the user to update
+
     user = User.query.filter_by(username="user").first()
 
     response = client.put(
@@ -46,21 +48,18 @@ def test_update_user(client, admin_headers, db_session):
     assert data["theme"] == "dark"
     assert data["role"] == "admin"
 
-    # Verify changes in database
     updated_user = User.query.get(user.id)
     assert updated_user.email == "updated_user@example.com"
     assert updated_user.theme == "dark"
     assert updated_user.role == UserRole.ADMIN
 
-    # The "user" account is shared by the whole session: restore its role so
-    # later tests that rely on it being a regular user are not affected.
     updated_user.role = UserRole.USER
     db_session.commit()
 
 
 def test_delete_user(client, admin_headers, db_session):
     """Test deleting a user as admin."""
-    # First create a user to delete
+
     new_user = User(
         username="to_delete", email="to_delete@example.com", password_hash="hashed_password", role=UserRole.USER
     )
@@ -76,13 +75,13 @@ def test_delete_user(client, admin_headers, db_session):
     assert "message" in data
     assert data["message"] == "User deleted successfully"
 
-    # Verify user was deleted from database
     deleted_user = User.query.get(user_id)
     assert deleted_user is None
 
 
 def test_get_settings(client, user_headers):
     """Test getting application settings."""
+
     response = client.get("/admin/settings", headers=user_headers)
 
     assert response.status_code == 200
@@ -93,6 +92,7 @@ def test_get_settings(client, user_headers):
 
 def test_add_setting(client, admin_headers, db_session):
     """Test adding a new application setting."""
+
     response = client.post(
         "/admin/settings",
         headers=admin_headers,
@@ -109,7 +109,6 @@ def test_add_setting(client, admin_headers, db_session):
     assert data["key"] == "notification_threshold"
     assert data["value"] == "30"
 
-    # Verify in database
     setting = AppSettings.query.filter_by(key="notification_threshold").first()
     assert setting is not None
     assert setting.value == "30"
@@ -118,6 +117,7 @@ def test_add_setting(client, admin_headers, db_session):
 
 def test_update_setting_admin(client, admin_headers, db_session):
     """Test updating an application setting as admin."""
+
     response = client.put(
         "/admin/settings/sampling_rate",
         headers=admin_headers,
@@ -129,7 +129,6 @@ def test_update_setting_admin(client, admin_headers, db_session):
     assert data["value"] == "600"
     assert data["description"] == "Updated description"
 
-    # Verify in database
     setting = AppSettings.query.filter_by(key="sampling_rate").first()
     assert setting.value == "600"
     assert setting.description == "Updated description"
@@ -137,13 +136,14 @@ def test_update_setting_admin(client, admin_headers, db_session):
 
 def test_update_setting_user(client, user_headers, db_session):
     """Test updating a non-admin setting as regular user."""
+
     response = client.put("/admin/settings/display_units", headers=user_headers, json={"value": "fahrenheit"})
 
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data["value"] == "fahrenheit"
 
-    # Verify in database
+
     setting = AppSettings.query.filter_by(key="display_units").first()
     assert setting.value == "fahrenheit"
 
